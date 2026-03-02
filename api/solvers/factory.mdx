@@ -1,0 +1,195 @@
+---
+title: Solver Factory
+description: Factory function for creating solver instances
+---
+
+## get_simulation_helper
+
+Factory function that returns the appropriate `SimulationHelper` instance based on the solver type and model type.
+
+**Source:** `src/solver_wrappers/__init__.py`
+
+### Function Signature
+
+```python
+get_simulation_helper(
+    model_path: str = None,
+    solver: str = None,
+    model_type: str = None,
+    dt: float = None,
+    sim_time: float = None,
+    solver_info: dict = None,
+    pre_time: float = 0.0
+)
+```
+
+### Parameters
+
+<ParamField path="model_path" type="str" default="None">
+  Path to the model file (`.cellml` for CellML models, `.py` for Python models)
+</ParamField>
+
+<ParamField path="solver" type="str" default="None">
+  Solver type to use:
+  - `'CVODE'` - OpenCOR's CVODE solver (CellML only, default)
+  - `'CVODE_myokit'` - Myokit's CVODE solver (CellML only)
+  - `'solve_ivp'` - SciPy solver (Python models only)
+  - Methods: `'RK45'`, `'RK23'`, `'DOP853'`, `'Radau'`, `'BDF'`, `'LSODA'`, `'RK4'`, `'forward_euler'`
+</ParamField>
+
+<ParamField path="model_type" type="str" default="None">
+  Model type: `'cellml_only'` or `'python'`
+</ParamField>
+
+<ParamField path="dt" type="float" default="None">
+  Time step for simulation output (seconds)
+</ParamField>
+
+<ParamField path="sim_time" type="float" default="None">
+  Total simulation time (seconds)
+</ParamField>
+
+<ParamField path="solver_info" type="dict" default="None">
+  Solver-specific configuration options
+</ParamField>
+
+<ParamField path="pre_time" type="float" default="0.0">
+  Pre-simulation time for initialization (seconds)
+</ParamField>
+
+### Returns
+
+<ResponseField name="helper" type="SimulationHelper">
+  An instance of the appropriate `SimulationHelper` subclass:
+  - `OpenCORSimulationHelper` for CVODE with OpenCOR
+  - `MyokitSimulationHelper` for CVODE with Myokit
+  - `PythonSimulationHelper` for solve_ivp methods
+</ResponseField>
+
+### Raises
+
+- **ValueError**: If solver type doesn't match model type (e.g., CVODE with Python model)
+- **RuntimeError**: If requested solver is not available in the environment
+
+### Usage Examples
+
+#### CellML model with OpenCOR (default)
+
+```python
+from solver_wrappers import get_simulation_helper
+
+helper = get_simulation_helper(
+    model_path="generated_models/3compartment/3compartment.cellml",
+    solver="CVODE",
+    model_type="cellml_only",
+    dt=0.01,
+    sim_time=2.0,
+    pre_time=20.0
+)
+```
+
+#### CellML model with Myokit
+
+```python
+helper = get_simulation_helper(
+    model_path="model.cellml",
+    solver="CVODE_myokit",
+    model_type="cellml_only",
+    dt=0.01,
+    sim_time=2.0
+)
+```
+
+#### Python model with BDF solver
+
+```python
+helper = get_simulation_helper(
+    model_path="generated_models/model.py",
+    solver="BDF",
+    model_type="python",
+    dt=0.01,
+    sim_time=2.0,
+    solver_info={"rtol": 1e-6, "atol": 1e-8}
+)
+```
+
+#### Automatic solver selection
+
+```python
+# For CellML, defaults to OpenCOR CVODE
+helper = get_simulation_helper(
+    model_path="model.cellml",
+    model_type="cellml_only",
+    dt=0.01,
+    sim_time=2.0
+)
+
+# For Python, uses SciPy solve_ivp
+helper = get_simulation_helper(
+    model_path="model.py",
+    model_type="python",
+    dt=0.01,
+    sim_time=2.0
+)
+```
+
+### Validation Rules
+
+The factory enforces compatibility between solver and model types:
+
+| Solver | Valid Model Types | Notes |
+|--------|-------------------|-------|
+| `CVODE` | `cellml_only` | Requires OpenCOR installation |
+| `CVODE_myokit` | `cellml_only` | Requires Myokit installation |
+| `solve_ivp` methods | `python` | Model path must end with `.py` |
+
+## get_simulation_helper_from_inp_data_dict
+
+Convenience wrapper that extracts parameters from a user inputs dictionary.
+
+### Function Signature
+
+```python
+get_simulation_helper_from_inp_data_dict(inp_data_dict: dict)
+```
+
+### Parameters
+
+<ParamField path="inp_data_dict" type="dict" required>
+  Dictionary containing:
+  - `model_path` (str)
+  - `solver_info` (dict with `solver` key)
+  - `model_type` (str)
+  - `dt` (float)
+  - `sim_time` (float)
+  - `pre_time` (float)
+</ParamField>
+
+### Returns
+
+<ResponseField name="helper" type="SimulationHelper">
+  SimulationHelper instance configured from the dictionary
+</ResponseField>
+
+### Usage Example
+
+```python
+from solver_wrappers import get_simulation_helper_from_inp_data_dict
+
+inp_data = {
+    "model_path": "model.cellml",
+    "solver_info": {"solver": "CVODE"},
+    "model_type": "cellml_only",
+    "dt": 0.01,
+    "sim_time": 2.0,
+    "pre_time": 20.0
+}
+
+helper = get_simulation_helper_from_inp_data_dict(inp_data)
+```
+
+## See Also
+
+- [OpenCOR Helper](/api/solvers/opencor-helper) - CVODE solver with OpenCOR
+- [Myokit Helper](/api/solvers/myokit-helper) - CVODE solver with Myokit
+- [Python Solver](/api/solvers/python-solver) - SciPy solve_ivp wrapper

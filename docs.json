@@ -117,6 +117,7 @@
           {
             "group": "Solver Wrappers",
             "pages": [
+              "api/solvers/factory",
               "api/solvers/opencor-helper",
               "api/solvers/myokit-helper",
               "api/solvers/python-solver"
