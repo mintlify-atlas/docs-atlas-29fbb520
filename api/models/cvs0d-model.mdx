@@ -1,0 +1,89 @@
+---
+title: CVS0DModel
+description: Representation of a 0D cardiovascular model
+---
+
+## CVS0DModel
+
+Class representing a 0D cardiovascular model with parameter identification capabilities.
+
+### Constructor
+
+```python
+CVS0DModel(
+    vessels_df,
+    parameters_array,
+    param_id_name_and_vals=None,
+    param_id_date=None
+)
+```
+
+<ParamField path="vessels_df" type="DataFrame" required>
+  DataFrame containing vessel information for the cardiovascular model
+</ParamField>
+
+<ParamField path="parameters_array" type="array" required>
+  Array of parameter values for the model
+</ParamField>
+
+<ParamField path="param_id_name_and_vals" type="dict" default="None">
+  Dictionary mapping parameter names to their identified values from parameter identification
+</ParamField>
+
+<ParamField path="param_id_date" type="str" default="None">
+  Date string indicating when parameter identification was performed
+</ParamField>
+
+### Attributes
+
+<ResponseField name="vessels_df" type="DataFrame">
+  Vessel configuration DataFrame
+</ResponseField>
+
+<ResponseField name="parameters_array" type="array">
+  Model parameters array
+</ResponseField>
+
+<ResponseField name="param_id_name_and_vals" type="dict">
+  Parameter identification results (parameter names and values)
+</ResponseField>
+
+<ResponseField name="param_id_date" type="str">
+  Date of parameter identification
+</ResponseField>
+
+<ResponseField name="possible_vessel_types" type="list">
+  List of possible vessel types for the model (initialized as None)
+</ResponseField>
+
+<ResponseField name="possible_BC_types" type="list">
+  List of possible boundary condition types (initialized as None)
+</ResponseField>
+
+### Example Usage
+
+```python
+import pandas as pd
+import numpy as np
+from models.LumpedModels import CVS0DModel
+
+# Create vessel configuration
+vessels_df = pd.DataFrame({
+    'vessel_id': [1, 2, 3],
+    'type': ['artery', 'vein', 'capillary']
+})
+
+# Define parameters
+parameters = np.array([0.1, 0.2, 0.3])
+
+# Create model instance
+model = CVS0DModel(
+    vessels_df=vessels_df,
+    parameters_array=parameters,
+    param_id_date="2024-01-15"
+)
+```
+
+### Source Location
+
+`~/workspace/source/src/models/LumpedModels.py:7`

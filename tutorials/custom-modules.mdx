@@ -1,0 +1,632 @@
+---
+title: "Creating Custom CellML Modules"
+description: "Learn how to create custom vessel types and CellML modules with proper configuration files"
+---
+
+This tutorial teaches you how to create custom CellML modules and integrate them into Circulatory Autogen. You'll learn to define new vessel types, create module configuration files, and couple your modules with existing ones.
+
+## Prerequisites
+
+- Understanding of [basic model creation](/tutorials/basic-model)
+- Familiarity with CellML syntax
+- Knowledge of your module's mathematical equations
+- Completed the [3-compartment example](/tutorials/3compartment-example)
+
+## Overview
+
+Creating a custom module involves:
+
+1. Writing the CellML module with your equations
+2. Creating a JSON configuration file that defines ports and variables
+3. Optionally defining custom units
+4. Integrating into your model via the vessel array
+
+## Module storage locations
+
+You can store custom modules in two places:
+
+<CodeGroup>
+```bash Within repository
+[project_dir]/module_config_user/
+├── my_modules.cellml
+├── my_modules_config.json
+└── user_units.cellml (optional)
+```
+
+```bash External directory
+[CA_user_dir]/my_custom_modules/
+├── custom_modules.cellml
+├── custom_modules_config.json
+└── user_units.cellml (optional)
+```
+</CodeGroup>
+
+<Note>
+  To use an external directory, set `external_modules_dir` in your `user_inputs.yaml` to the directory containing your `*_modules.cellml` and `*_modules_config.json` files.
+</Note>
+
+## Step 1: Create the CellML module
+
+Let's create a simple arterial vessel with constant material properties.
+
+<Steps>
+  <Step title="Create the CellML file">
+    Create `module_config_user/vessel_properties_modules.cellml`:
+    
+    ```xml vessel_properties_modules.cellml
+    <?xml version="1.0" encoding="UTF-8"?>
+    <model xmlns="http://www.cellml.org/cellml/2.0#" name="vessel_properties_modules">
+      
+      <!-- Import standard units -->
+      <import xmlns:xlink="http://www.w3.org/1999/xlink" 
+              xlink:href="../src/generators/resources/units.cellml">
+        <units units_ref="J_per_m3" name="J_per_m3"/>
+        <units units_ref="metre" name="metre"/>
+        <units units_ref="dimensionless" name="dimensionless"/>
+        <units units_ref="per_m" name="per_m"/>
+      </import>
+      
+      <component name="material_prop_const_type">
+        
+        <!-- Input variable -->
+        <variable name="r_0" units="metre" interface="public" />
+        
+        <!-- Output variable -->
+        <variable name="K_tube" units="J_per_m3" interface="public" />
+        
+        <!-- Constants -->
+        <variable name="E" units="J_per_m3" interface="public" />
+        <variable name="a_vessel" units="dimensionless" interface="public" />
+        <variable name="b_vessel" units="per_m" interface="public" />
+        <variable name="c_vessel" units="dimensionless" interface="public" />
+        <variable name="d_vessel" units="per_m" interface="public" />
+        
+        <!-- Equation: K_tube = E * (a + b*r_0) / (c + d*r_0) -->
+        <math xmlns="http://www.w3.org/1998/Math/MathML">
+          <apply><eq/>
+            <ci>K_tube</ci>
+            <apply><divide/>
+              <apply><times/>
+                <ci>E</ci>
+                <apply><plus/>
+                  <ci>a_vessel</ci>
+                  <apply><times/>
+                    <ci>b_vessel</ci>
+                    <ci>r_0</ci>
+                  </apply>
+                </apply>
+              </apply>
+              <apply><plus/>
+                <ci>c_vessel</ci>
+                <apply><times/>
+                  <ci>d_vessel</ci>
+                  <ci>r_0</ci>
+                </apply>
+              </apply>
+            </apply>
+          </apply>
+        </math>
+        
+      </component>
+    </model>
+    ```
+    
+    This module calculates vessel stiffness (`K_tube`) based on radius (`r_0`) and material properties.
+  </Step>
+  
+  <Step title="Understand the structure">
+    Key elements of a CellML module:
+    
+    - **Imports**: Bring in unit definitions from `units.cellml`
+    - **Component**: Named container for your module (must match config)
+    - **Variables**: Define inputs, outputs, and constants
+    - **Interface**: `public` makes variables accessible for coupling
+    - **Math**: MathML equations defining relationships
+  </Step>
+</Steps>
+
+## Step 2: Create the configuration file
+
+The JSON config tells Circulatory Autogen how to use your module.
+
+<Steps>
+  <Step title="Create the JSON configuration">
+    Create `module_config_user/vessel_properties_module_config.json`:
+    
+    ```json vessel_properties_module_config.json
+    [
+      {
+        "vessel_type": "material_prop_const_tutorial",
+        "BC_type": "nn",
+        "module_format": "cellml",
+        "module_file": "vessel_properties_modules.cellml",
+        "module_type": "material_prop_const_type",
+        "entrance_ports": [],
+        "exit_ports": [],
+        "general_ports": [
+          {
+            "port_type": "radius_port",
+            "variables": ["r_0"]
+          },
+          {
+            "port_type": "stiffness_port",
+            "variables": ["K_tube"]
+          }
+        ],
+        "variables_and_units": [
+          ["K_tube", "J_per_m3", "access", "variable"],
+          ["r_0", "metre", "access", "boundary_condition"],
+          ["E", "J_per_m3", "access", "constant"],
+          ["a_vessel", "dimensionless", "no_access", "global_constant"],
+          ["b_vessel", "per_m", "no_access", "global_constant"],
+          ["c_vessel", "dimensionless", "no_access", "global_constant"],
+          ["d_vessel", "per_m", "no_access", "global_constant"]
+        ]
+      }
+    ]
+    ```
+  </Step>
+  
+  <Step title="Understand configuration fields">
+    <AccordionGroup>
+      <Accordion title="Basic identification">
+        - **vessel_type**: Name used in vessel_array.csv
+        - **BC_type**: Boundary condition type (vp, vv, pp, pv, nn)
+        - **module_format**: Currently only `cellml` supported
+        - **module_file**: CellML filename in `module_config_user/` or `external_modules_dir`
+        - **module_type**: Component name from CellML file
+      </Accordion>
+      
+      <Accordion title="Port definitions">
+        Ports define how modules connect:
+        
+        - **entrance_ports**: For modules connected as output of another
+        - **exit_ports**: For modules connected as input to another  
+        - **general_ports**: For non-spatial connections (properties, signals)
+        
+        Each port has:
+        - `port_type`: Name to match with connected modules
+        - `variables`: List of variables in this port
+        - `multi_port` (optional): "True" or "sum" for multiple connections
+        
+        <Note>
+          Modules couple when they share matching port_type names. Variables in matching ports get mapped together.
+        </Note>
+      </Accordion>
+      
+      <Accordion title="Variables and units">
+        Each variable entry is an array: `[name, unit, access, parameter_type]`
+        
+        **Access levels:**
+        - `access`: Variable accessible in simulation output
+        - `no_access`: Not accessible (saves memory)
+        
+        **Parameter types:**
+        - `constant`: Set per-module, name format: `[var]_[vessel_name]`
+        - `global_constant`: Set once globally, name format: `[var]`
+        - `variable`: Computed during simulation
+        - `boundary_condition`: From connected module if port connected, else constant
+      </Accordion>
+    </AccordionGroup>
+  </Step>
+</Steps>
+
+## Step 3: Define custom units (optional)
+
+If you need units not in the standard `units.cellml`:
+
+<Steps>
+  <Step title="Create user_units.cellml">
+    Add to `module_config_user/user_units.cellml`:
+    
+    ```xml user_units.cellml
+    <?xml version="1.0" encoding="UTF-8"?>
+    <model xmlns="http://www.cellml.org/cellml/2.0#" name="user_units">
+      
+      <units name="my_custom_unit">
+        <unit prefix="milli" units="metre"/>
+        <unit exponent="2" units="second"/>
+      </units>
+      
+    </model>
+    ```
+  </Step>
+  
+  <Step title="Import in your module">
+    Reference the custom unit in your CellML module:
+    
+    ```xml
+    <import xmlns:xlink="http://www.w3.org/1999/xlink" 
+            xlink:href="user_units.cellml">
+      <units units_ref="my_custom_unit" name="my_custom_unit"/>
+    </import>
+    ```
+  </Step>
+</Steps>
+
+## Example: Advanced module with state variables
+
+Let's create a module with viscoelastic properties and a state variable.
+
+<CodeGroup>
+```xml Module CellML
+<component name="material_prop_visco_const_type">
+  
+  <!-- Boundary condition inputs -->
+  <variable name="l" units="metre" interface="public" />
+  <variable name="r_0" units="metre" interface="public" />
+  
+  <!-- Outputs -->
+  <variable name="K_tube" units="J_per_m3" interface="public" />
+  <variable name="K_tube_visco" units="Js_per_m6" interface="public" />
+  
+  <!-- Constants -->
+  <variable name="E" units="J_per_m3" interface="public" />
+  <variable name="K_m" units="Js_per_m3" interface="public" />
+  <variable name="a_vessel" units="dimensionless" interface="public" />
+  <variable name="b_vessel" units="per_m" interface="public" />
+  <variable name="c_vessel" units="dimensionless" interface="public" />
+  <variable name="d_vessel" units="per_m" interface="public" />
+  
+  <math xmlns="http://www.w3.org/1998/Math/MathML">
+    <!-- Elastic stiffness -->
+    <apply><eq/>
+      <ci>K_tube</ci>
+      <apply><divide/>
+        <apply><times/>
+          <ci>E</ci>
+          <apply><plus/>
+            <ci>a_vessel</ci>
+            <apply><times/><ci>b_vessel</ci><ci>r_0</ci></apply>
+          </apply>
+        </apply>
+        <apply><plus/>
+          <ci>c_vessel</ci>
+          <apply><times/><ci>d_vessel</ci><ci>r_0</ci></apply>
+        </apply>
+      </apply>
+    </apply>
+    
+    <!-- Viscous coefficient -->
+    <apply><eq/>
+      <ci>K_tube_visco</ci>
+      <apply><times/>
+        <ci>K_m</ci>
+        <ci>l</ci>
+      </apply>
+    </apply>
+  </math>
+  
+</component>
+```
+
+```json Module configuration
+{
+  "vessel_type": "material_prop_visco_const_tutorial",
+  "BC_type": "nn",
+  "module_format": "cellml",
+  "module_file": "vessel_properties_modules.cellml",
+  "module_type": "material_prop_visco_const_type",
+  "entrance_ports": [],
+  "exit_ports": [],
+  "general_ports": [
+    {
+      "port_type": "len_port",
+      "variables": ["l"]
+    },
+    {
+      "port_type": "radius_port",
+      "variables": ["r_0"]
+    },
+    {
+      "port_type": "visco_mod_port",
+      "variables": ["K_m"]
+    },
+    {
+      "port_type": "stiffness_port",
+      "variables": ["K_tube"]
+    },
+    {
+      "port_type": "visco_coeff_port",
+      "variables": ["K_tube_visco"]
+    }
+  ],
+  "variables_and_units": [
+    ["K_tube", "J_per_m3", "access", "variable"],
+    ["K_tube_visco", "Js_per_m6", "access", "variable"],
+    ["l", "metre", "access", "boundary_condition"],
+    ["r_0", "metre", "access", "boundary_condition"],
+    ["E", "J_per_m3", "access", "constant"],
+    ["K_m", "Js_per_m3", "access", "constant"],
+    ["a_vessel", "dimensionless", "no_access", "global_constant"],
+    ["b_vessel", "per_m", "no_access", "global_constant"],
+    ["c_vessel", "dimensionless", "no_access", "global_constant"],
+    ["d_vessel", "per_m", "no_access", "global_constant"]
+  ]
+}
+```
+</CodeGroup>
+
+## Step 4: Use your module in a model
+
+<Steps>
+  <Step title="Add to vessel array">
+    Include your custom module in the vessel array:
+    
+    ```csv vessel_array.csv
+    name,BC_type,vessel_type,inp_vessels,out_vessels
+    custom_vessel,nn,material_prop_const_tutorial,other_module,next_module
+    ```
+  </Step>
+  
+  <Step title="Add parameters">
+    Define constants in your parameters file:
+    
+    ```csv parameters.csv
+    variable_name,units,value,data_reference
+    E_custom_vessel,J_per_m3,400000,user_defined
+    a_vessel,dimensionless,0.2802,literature_ref
+    b_vessel,per_m,-5.053,literature_ref
+    c_vessel,dimensionless,0.1324,literature_ref  
+    d_vessel,per_m,-0.4229,literature_ref
+    ```
+    
+    Note naming:
+    - `E_custom_vessel`: constant, includes vessel name
+    - `a_vessel`: global_constant, no vessel name
+  </Step>
+  
+  <Step title="Generate and test">
+    Run autogeneration to test your module:
+    
+    ```bash
+    cd [project_dir]/user_run_files
+    ./run_autogeneration.sh
+    ```
+    
+    Check for errors in module coupling or parameter definitions.
+  </Step>
+</Steps>
+
+## Module coupling examples
+
+### Example 1: Entrance/exit ports (spatial connection)
+
+An arterial module with entrance and exit ports for connecting to adjacent vessels:
+
+```json
+"entrance_ports": [
+  {
+    "port_type": "vessel_port",
+    "variables": ["v_in", "u"]
+  }
+],
+"exit_ports": [
+  {
+    "port_type": "vessel_port",
+    "variables": ["v", "u_out"]
+  }
+]
+```
+
+When vessel A's exit connects to vessel B's entrance with matching `vessel_port` type:
+- `v` from A maps to `v_in` in B
+- `u_out` from A maps to `u` in B
+
+### Example 2: Multi-port connections
+
+For modules that connect to multiple others (e.g., a junction):
+
+```json
+"exit_ports": [
+  {
+    "port_type": "vessel_port",
+    "variables": ["v_out", "u_out"],
+    "multi_port": "True"
+  }
+]
+```
+
+Or for summing multiple inputs:
+
+```json
+"entrance_ports": [
+  {
+    "port_type": "vessel_port",
+    "variables": ["v_in_sum", "u"],
+    "multi_port": "sum"
+  }
+]
+```
+
+### Example 3: General ports (non-spatial)
+
+For material properties or regulatory signals:
+
+```json
+"general_ports": [
+  {
+    "port_type": "Ca_port",
+    "variables": ["Ca_i"]
+  },
+  {
+    "port_type": "membrane_voltage",
+    "variables": ["V_m"]
+  }
+]
+```
+
+General ports couple to any matching port type (entrance, exit, or general) in connected vessels.
+
+## Real-world example: Ion channel module
+
+Here's a real example from the codebase:
+
+```json i_piezo_Na_tutorial config
+{
+  "vessel_type": "i_piezo_Na_tutorial",
+  "BC_type": "nn",
+  "module_format": "cellml",
+  "module_file": "tutorial_modules.cellml",
+  "module_type": "i_piezo_Na_tutorial",
+  "entrance_ports": [],
+  "exit_ports": [],
+  "general_ports": [
+    {
+      "port_type": "membrane_mVage",
+      "variables": ["Vm"]
+    },
+    {
+      "port_type": "Na_Nernst_potential",
+      "variables": ["E_Na"]
+    }
+  ],
+  "variables_and_units": [
+    ["I_piezo", "picoA", "access", "variable"],
+    ["g", "nS", "access", "constant"],
+    ["Vm", "milliV", "access", "boundary_condition"],
+    ["E_Na", "milliV", "access", "boundary_condition"],
+    ["m_V", "dimensionless", "access", "variable"],
+    ["m_V_init", "dimensionless", "access", "constant"],
+    ["m_V_inf", "dimensionless", "access", "variable"],
+    ["tau_V", "ms", "access", "constant"],
+    ["V_50", "milliV", "access", "constant"],
+    ["k_V", "milliV", "access", "constant"]
+  ]
+}
+```
+
+This module:
+- Has no spatial connections (empty entrance/exit ports)
+- Couples via membrane voltage and Nernst potential
+- Takes voltage as input, provides current as output
+- Can connect to any module with matching port types
+
+## Converting existing CellML models
+
+If you have an existing CellML model to convert:
+
+<Steps>
+  <Step title="Use the conversion script">
+    Edit `[project_dir]/src/scripts/generate_modules_files.py`:
+    
+    ```python
+    input_model = '/path/to/your/model.cellml'
+    output_dir = '/path/to/output'
+    file_prefix = 'my_model'
+    vessel_name = 'my_vessel'
+    component_name = 'main_component'
+    time_variable = 'time'
+    data_reference = 'Author_Year'
+    ```
+  </Step>
+  
+  <Step title="Run the script">
+    ```bash
+    cd [project_dir]
+    [OpenCOR_dir]/pythonshell src/scripts/generate_modules_files.py
+    ```
+    
+    This generates:
+    - `my_model_modules.cellml` in `module_config_user/`
+    - `my_model_module_config.json` in `module_config_user/`
+    - `my_model_parameters.csv` in `output_dir/resources`
+    - `my_model_vessel_array.csv` in `output_dir/resources`
+    - `my_model_user_inputs.yaml` in `output_dir`
+  </Step>
+  
+  <Step title="Review and modify">
+    Review generated files and add:
+    - Port definitions for coupling
+    - Proper boundary condition types
+    - Additional vessels to create a network
+  </Step>
+</Steps>
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Module design" icon="drafting-compass">
+    - Keep modules focused on single physiological components
+    - Use meaningful variable and port names
+    - Document equations in comments
+    - Test modules individually before coupling
+  </Accordion>
+  
+  <Accordion title="Port organization" icon="plug">
+    - Use entrance/exit ports for spatial connections (flow, pressure)
+    - Use general ports for properties and regulatory signals
+    - Match port_type names across related modules
+    - Use multi_port for junctions and bifurcations
+  </Accordion>
+  
+  <Accordion title="Parameter management" icon="sliders">
+    - Use global_constant for shared properties (density, cycle time)
+    - Use constant for vessel-specific values
+    - Include literature references in data_reference
+    - Mark calibration candidates as "to_be_identified"
+  </Accordion>
+  
+  <Accordion title="Units consistency" icon="ruler">
+    - Always use units from units.cellml when possible
+    - Define custom units in user_units.cellml
+    - Verify dimensional consistency in equations
+    - Use standard SI-based units
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Module not found error">
+    Check:
+    - `module_file` matches your CellML filename
+    - `module_type` matches component name in CellML
+    - File is in `module_config_user/` or `external_modules_dir`
+    - JSON file has `.json` extension and is in same directory
+  </Accordion>
+  
+  <Accordion title="Port coupling fails">
+    Verify:
+    - `port_type` names match exactly between modules
+    - Variable lists have compatible sizes
+    - Modules are actually connected in vessel_array.csv
+    - BC_types are compatible
+  </Accordion>
+  
+  <Accordion title="Parameter not found">
+    Ensure:
+    - Constant variables use format `[var]_[vessel_name]`
+    - Global constants use format `[var]` (no vessel name)
+    - All constants in config are in parameters.csv
+    - No typos in variable names
+  </Accordion>
+  
+  <Accordion title="Simulation fails">
+    Check:
+    - All state variables have initial values
+    - Equations are dimensionally consistent  
+    - No division by zero or singularities
+    - Solver tolerances appropriate for stiffness
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Design Models" icon="pen-ruler" href="/tutorials/basic-model">
+    Advanced techniques for complex model architectures
+  </Card>
+  
+  <Card title="Parameter Identification" icon="bullseye" href="/param-id/overview">
+    Calibrate your custom module parameters
+  </Card>
+  
+  <Card title="CellML Resources" icon="book-open" href="https://www.cellml.org/">
+    Learn more about CellML specification
+  </Card>
+  
+  <Card title="Example Modules" icon="folder-open" href="/api/generators/cellml-generator">
+    Browse built-in module configurations
+  </Card>
+</CardGroup>

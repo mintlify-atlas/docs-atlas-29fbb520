@@ -1,0 +1,333 @@
+---
+title: CVS0DCppGenerator
+description: Generator class for creating C++ code from CellML 0D cardiovascular models with optional 1D coupling
+---
+
+## Overview
+
+The `CVS0DCppGenerator` class generates C++ code from CellML files for 0D cardiovascular models. It supports advanced features including delayed differential equations, coupling to 1D models, and external variable annotations.
+
+**Source:** `~/workspace/source/src/generators/CVSCppGenerator.py`
+
+## Class: CVS0DCppGenerator
+
+### Constructor
+
+```python
+CVS0DCppGenerator(
+    model,
+    generated_model_subdir,
+    file_prefix,
+    resources_dir=None,
+    solver='CVODE',
+    dtSample=1e-3,
+    dtSolver=1e-4,
+    nMaxSteps=5000,
+    couple_to_1d=False,
+    cpp_generated_models_dir=None,
+    model_1d_config_path=None,
+    create_main_0d=False,
+    conn_1d_0d_info=None,
+    DEBUG=False
+)
+```
+
+Initializes the C++ generator with model and solver configuration.
+
+<ParamField path="model" type="CVS0DModel" required>
+  The 0D cardiovascular system model to generate C++ code for
+</ParamField>
+
+<ParamField path="generated_model_subdir" type="str" required>
+  Directory containing the generated CellML files
+</ParamField>
+
+<ParamField path="file_prefix" type="str" required>
+  Prefix for the model files (without .cellml extension)
+</ParamField>
+
+<ParamField path="resources_dir" type="str">
+  Path to resources directory. Defaults to package resources if None
+</ParamField>
+
+<ParamField path="solver" type="str" default="CVODE">
+  ODE solver to use (e.g., 'CVODE', 'RK4')
+</ParamField>
+
+<ParamField path="dtSample" type="float" default="1e-3">
+  Sampling time step in seconds
+</ParamField>
+
+<ParamField path="dtSolver" type="float" default="1e-4">
+  Solver time step in seconds
+</ParamField>
+
+<ParamField path="nMaxSteps" type="int" default="5000">
+  Maximum number of solver steps
+</ParamField>
+
+<ParamField path="couple_to_1d" type="bool" default="False">
+  Enable coupling to 1D finite volume models
+</ParamField>
+
+<ParamField path="cpp_generated_models_dir" type="str">
+  Output directory for C++ files. Defaults to `generated_model_subdir` or `generated_model_subdir_cpp` if coupling to 1D
+</ParamField>
+
+<ParamField path="model_1d_config_path" type="str">
+  Path to 1D model configuration (required if `couple_to_1d=True`)
+</ParamField>
+
+<ParamField path="create_main_0d" type="bool" default="False">
+  Create a standalone main.cpp file for the 0D model
+</ParamField>
+
+<ParamField path="conn_1d_0d_info" type="dict">
+  Dictionary containing 1D-0D connection information (required if `couple_to_1d=True`)
+</ParamField>
+
+<ParamField path="DEBUG" type="bool" default="False">
+  Enable debug output
+</ParamField>
+
+**Example:**
+
+```python
+from generators.CVSCppGenerator import CVS0DCppGenerator
+
+generator = CVS0DCppGenerator(
+    model=my_model,
+    generated_model_subdir='./generated',
+    file_prefix='cvs_model',
+    solver='CVODE',
+    dtSample=0.001,
+    dtSolver=0.0001,
+    couple_to_1d=False
+)
+```
+
+### Methods
+
+#### annotate_cellml()
+
+```python
+annotate_cellml() -> None
+```
+
+Annotates the CellML model with RDF metadata for delayed variables, coupling variables, and external connections. This is required before C++ generation.
+
+**Actions:**
+- Assigns unique IDs to all CellML entities
+- Identifies delayed differential equation variables
+- Marks input/output variables for 1D-0D coupling
+- Creates RDF annotations in Turtle format
+- Saves annotated model as `{file_prefix}-with-ids.cellml`
+- Saves annotations as `{file_prefix}-with-ids--annotations.ttl`
+
+**Example:**
+
+```python
+generator.annotate_cellml()
+# Creates: cvs_model-with-ids.cellml
+#          cvs_model-with-ids--annotations.ttl
+```
+
+#### generate_cellml()
+
+```python
+generate_cellml(inp_data_dict) -> None
+```
+
+Generates CellML files using `CVS0DCellMLGenerator` before C++ generation.
+
+<ParamField path="inp_data_dict" type="dict" required>
+  Input data dictionary for CellML generation (see CVS0DCellMLGenerator)
+</ParamField>
+
+**Example:**
+
+```python
+inp_data = {
+    'generated_models_subdir': './generated',
+    'file_prefix': 'cvs_model',
+    'DEBUG': False
+}
+generator.generate_cellml(inp_data)
+```
+
+#### generate_cpp()
+
+```python
+generate_cpp() -> None
+```
+
+Generates C++ code from the annotated CellML model using libCellML's C generator.
+
+**Returns:** None (writes C++ files to disk)
+
+**Generated Files:**
+- `{output_cpp_file_name}.h` - Model header file
+- `{output_cpp_file_name}.cpp` - Model implementation
+- `main.cpp` - Main file (if `create_main=True`)
+
+**Features:**
+- Implements delayed differential equations
+- Handles 1D-0D coupling with flow/pressure boundary conditions
+- Supports external variable connections
+- Includes solver configuration
+
+**Example:**
+
+```python
+generator.annotate_cellml()
+generator.generate_cpp()
+# Creates: model0d.h, model0d.cpp (if coupled to 1D)
+#     or: cvs_model.h, cvs_model.cpp (standalone)
+```
+
+#### set_annotated_model_file_path()
+
+```python
+set_annotated_model_file_path(annotated_model_file_path: str) -> None
+```
+
+Use a pre-existing annotated CellML file instead of generating annotations.
+
+<ParamField path="annotated_model_file_path" type="str" required>
+  Path to existing annotated model RDF file (.ttl)
+</ParamField>
+
+## Properties
+
+### Coupling Configuration
+
+<ParamField path="couple_to_1d" type="bool">
+  Whether the model is coupled to a 1D finite volume model
+</ParamField>
+
+<ParamField path="couple_volume_sum" type="bool">
+  Whether volume sum coupling is enabled (set automatically)
+</ParamField>
+
+<ParamField path="port_input_variables" type="list">
+  List of variable IDs for 1D-0D coupling inputs
+</ParamField>
+
+<ParamField path="port_output_variables" type="list">
+  List of variable IDs for 1D-0D coupling outputs
+</ParamField>
+
+<ParamField path="control_variables" type="list">
+  List of control variable IDs (e.g., resistance in 1D FV models)
+</ParamField>
+
+<ParamField path="connection_vessel_indices" type="list">
+  Indices of vessels in 1D model connected to 0D model
+</ParamField>
+
+<ParamField path="connection_vessel_inlet_or_outlet" type="list">
+  Whether each connection is at inlet or outlet ('inlet' or 'outlet')
+</ParamField>
+
+<ParamField path="connection_vessel_flow_or_pressure_bc" type="list">
+  Boundary condition type for each connection ('flow' or 'pressure')
+</ParamField>
+
+### Delayed Variables
+
+<ParamField path="variables_to_delay" type="list">
+  List of variable IDs to apply delay to
+</ParamField>
+
+<ParamField path="delayed_variables" type="list">
+  List of delayed variable IDs
+</ParamField>
+
+<ParamField path="delay_amounts" type="list">
+  List of delay amount variable IDs
+</ParamField>
+
+<ParamField path="independent_variables" type="list">
+  List of independent variable IDs (typically time)
+</ParamField>
+
+### Solver Configuration
+
+<ParamField path="solver" type="str">
+  ODE solver name (e.g., 'CVODE')
+</ParamField>
+
+<ParamField path="dtSample" type="float">
+  Sampling time step in seconds
+</ParamField>
+
+<ParamField path="dtSolver" type="float">
+  Solver time step in seconds
+</ParamField>
+
+<ParamField path="nMaxSteps" type="int">
+  Maximum number of solver steps
+</ParamField>
+
+## Workflow
+
+Typical usage workflow:
+
+1. **Generate CellML** (optional if already generated)
+   ```python
+   generator.generate_cellml(inp_data_dict)
+   ```
+
+2. **Annotate Model**
+   ```python
+   generator.annotate_cellml()
+   ```
+
+3. **Generate C++ Code**
+   ```python
+   generator.generate_cpp()
+   ```
+
+## 1D-0D Coupling
+
+When `couple_to_1d=True`, the generator:
+
+- Creates `model0d.cpp` and `model0d.h` (fixed names for linking)
+- Annotates variables for coupling to 1D finite volume vessels
+- Supports flow and pressure boundary conditions
+- Handles inlet/outlet connections
+- Includes resistance control variables
+- Supports volume sum variables for tracking total blood volume
+
+**Connection Info Format:**
+
+```python
+conn_1d_0d_info = {
+    '1': {
+        'vess0d_idx': 0,  # Index in 0D model vessels_df
+        'vess1d_idx': 0,  # Index in 1D model
+        'port_volume_sum': 0  # Optional: 1 if volume sum port
+    },
+    # ... more connections
+}
+```
+
+## Dependencies
+
+**Required:**
+- `libcellml` - For model parsing, annotation, and code generation
+- `rdflib` - For RDF graph creation and annotation
+- `numpy`, `pandas`, `re`, `json`
+
+**Optional:**
+- `utilities.libcellml_helper_funcs` - Helper functions for CellML operations
+- `utilities.libcellml_utilities` - Utility functions for issue reporting
+
+## Notes
+
+- Requires LibCellML to be installed (exits if not available)
+- Annotations use custom URIs for delayed and coupling variables
+- The generator creates RDF annotations in Turtle format
+- C++ generation uses libCellML's built-in C code generator
+- When coupled to 1D, output file is always named `model0d.cpp/h`
+- The class needs significant refactoring (noted in source comments)

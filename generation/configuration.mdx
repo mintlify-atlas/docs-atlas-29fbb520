@@ -1,0 +1,421 @@
+---
+title: Configuration
+description: Complete reference for user_inputs.yaml configuration options and settings
+---
+
+The `user_inputs.yaml` file is the central configuration file for Circulatory Autogen. It controls model generation, parameter identification, simulation settings, and output locations.
+
+## File Location
+
+By default, the configuration file is located at:
+```
+user_run_files/user_inputs.yaml
+```
+
+For project-specific configurations, you can create a custom YAML file and reference it:
+```yaml user_run_files/user_inputs.yaml
+user_inputs_path_override: /path/to/your/project/user_inputs_mymodel.yaml
+```
+
+## Essential Configuration
+
+These settings are required for basic model generation:
+
+```yaml user_inputs.yaml
+# Debug mode - enables verbose logging
+DEBUG: false
+
+# Model identifier - used as prefix for all generated files
+file_prefix: 3compartment
+
+# Input parameter file (must be in resources_dir)
+input_param_file: 3compartment_parameters.csv
+
+# Output format: cellml_only, python, or cpp
+model_type: cellml_only
+```
+
+### file_prefix
+
+The model name prefix used for:
+- Input files: `[file_prefix]_vessel_array.csv`, `[file_prefix]_parameters.csv`
+- Output directory: `generated_models/[file_prefix]/`
+- Generated files: `[file_prefix].cellml`, `[file_prefix]_modules.cellml`, etc.
+
+**Example:**
+```yaml
+file_prefix: 3compartment
+```
+Requires: `3compartment_vessel_array.csv` and `3compartment_parameters.csv` in `resources_dir`
+
+### model_type
+
+Controls what type of model code is generated:
+
+<CodeGroup>
+```yaml CellML Only (Default)
+model_type: cellml_only
+```
+Generates:
+- `[file_prefix].cellml` (main model)
+- `[file_prefix]_modules.cellml` (component definitions)
+- `[file_prefix]_parameters.cellml` (parameter values)
+- `[file_prefix]_units.cellml` (unit definitions)
+- `[file_prefix]_parameters.csv` (parameter list)
+
+```yaml Python
+model_type: python
+```
+Generates all CellML files plus:
+- `[file_prefix].py` (Python module for simulation)
+
+```yaml C++
+model_type: cpp
+```
+Generates CellML files plus:
+- C++ source files for high-performance simulation
+- Optionally writes to `cpp_generated_models_dir`
+</CodeGroup>
+
+## Directory Configuration
+
+Specify where input files are located and where outputs should be written:
+
+```yaml
+# Input files location
+resources_dir: /path/to/your/project/resources
+
+# Generated model outputs (optional - defaults to [project_dir]/generated_models)
+generated_models_dir: /path/to/your/project/generated_models
+
+# Parameter identification outputs (optional)
+param_id_output_dir: /path/to/your/project/param_id_output
+
+# External modules directory (optional)
+external_modules_dir: /path/to/your/custom/modules
+```
+
+### Directory Structure Example
+
+```
+your_project/
+├── user_inputs_mymodel.yaml
+├── resources/
+│   ├── mymodel_vessel_array.csv
+│   ├── mymodel_parameters.csv
+│   ├── mymodel_params_for_id.csv
+│   └── mymodel_obs_data.json
+├── generated_models/
+│   └── mymodel/
+│       ├── mymodel.cellml
+│       ├── mymodel_modules.cellml
+│       ├── mymodel_parameters.cellml
+│       ├── mymodel_units.cellml
+│       └── mymodel_parameters.csv
+└── param_id_output/
+    └── mymodel/
+        ├── predicted_params.csv
+        └── cost_history.csv
+```
+
+<Note>
+If you don't specify `generated_models_dir` or `param_id_output_dir`, outputs are written to default locations under `[project_dir]/generated_models/` and `[project_dir]/param_id_output/`.
+</Note>
+
+## Simulation Settings
+
+### Time Step and Duration
+
+```yaml
+# Output sampling time step (seconds)
+dt: 0.01
+
+# Pre-simulation time to reach steady state (seconds)
+pre_time: 20
+
+# Simulation time for comparison to ground truth (seconds)
+sim_time: 2
+```
+
+**When to adjust:**
+- `dt`: Smaller values (0.001) for detailed output; larger (0.1) for faster simulation
+- `pre_time`: Increase if model hasn't reached steady state
+- `sim_time`: Must cover at least one cardiac cycle for meaningful results
+
+### Solver Configuration
+
+```yaml
+solver: CVODE
+
+solver_info:
+  MaximumStep: 0.0001      # Maximum internal solver time step
+  MaximumNumberOfSteps: 5000
+```
+
+**Available solvers:**
+
+<CodeGroup>
+```yaml CVODE (OpenCOR)
+solver: CVODE
+solver_info:
+  MaximumStep: 0.0001
+  MaximumNumberOfSteps: 5000
+```
+Default solver using OpenCOR's CVODE implementation. Best for most CellML models.
+
+```yaml CVODE (Myokit)
+solver: CVODE_myokit  
+```
+Uses Myokit's CVODE wrapper. May be faster for some models.
+
+```yaml solve_ivp (Python)
+solver: CVODE
+solver_info:
+  method: RK45  # or BDF, LSODA, etc.
+```
+Only for `model_type: python`. Uses SciPy's solve_ivp.
+
+```yaml RK4 (C++)
+solver: RK4_cpp
+solver_info:
+  dt_solver: 0.0001
+```
+Only for `model_type: cpp`. Fixed-step Runge-Kutta 4th order.
+</CodeGroup>
+
+<Note>
+For stiff cardiovascular models, use small `MaximumStep` values (0.0001 or smaller) to ensure accurate valve dynamics and pressure transitions.
+</Note>
+
+## Parameter Identification
+
+Configure parameter identification (calibration) settings:
+
+```yaml
+# Optimization method
+param_id_method: genetic_algorithm  # or CMA-ES
+
+# Observation data file (must be absolute path)
+param_id_obs_path: /path/to/project/resources/3compartment_obs_data.json
+
+# Optimizer options
+optimiser_options:
+  num_calls_to_function: 10000    # Maximum function evaluations
+  cost_convergence: 0.001         # Convergence tolerance
+  max_patience: 10                # Patience for early stopping
+  cost_type: MSE                  # Cost function: MSE, MAE, etc.
+
+# Debug optimizer (used when DEBUG: true)
+debug_optimiser_options:
+  num_calls_to_function: 30
+  cost_convergence: 0.001
+  cost_type: MSE
+```
+
+### MCMC Configuration
+
+For uncertainty quantification after parameter identification:
+
+```yaml
+do_mcmc: true
+
+mcmc_options:
+  num_steps: 1000       # MCMC steps per walker
+  num_walkers: 64       # Number of MCMC walkers
+  cost_type: MSE
+  cost_convergence: 0.001
+
+debug_mcmc_options:
+  num_steps: 5
+  num_walkers: 40
+  cost_type: MSE
+  cost_convergence: 0.001
+```
+
+<Note>
+MCMC runs after parameter identification completes. It provides parameter uncertainty estimates and correlations.
+</Note>
+
+## Analysis Options
+
+### Sensitivity Analysis
+
+```yaml
+do_sensitivity: false
+
+sa_options:
+  method: sobol                    # Sensitivity analysis method
+  sample_type: saltelli            # Sampling strategy  
+  num_samples: 256                 # Base samples (actual = num_samples × (2M + 2))
+```
+
+When enabled, performs global sensitivity analysis to identify which parameters most influence model outputs.
+
+### Identifiability Analysis
+
+```yaml
+do_ia: true
+
+ia_options:
+  method: Laplace  # or profile_likelihood
+```
+
+Analyzes whether parameters can be uniquely identified from the available data.
+
+## Advanced Options
+
+### C++ Generation
+
+For `model_type: cpp`:
+
+```yaml
+model_type: cpp
+
+# C++ output directory
+cpp_generated_models_dir: /path/to/cpp/output
+
+# Coupling to 1D finite volume model
+couple_to_1d: false
+cpp_1d_model_config_path: /path/to/1d/config/input1d.dat
+```
+
+### Plotting
+
+```yaml
+# Generate prediction plots after parameter ID
+plot_predictions: true
+```
+
+Creates comparison plots of model predictions vs. observation data in the parameter identification output directory.
+
+## Complete Example
+
+Here's a complete configuration for a 3-compartment model with parameter identification:
+
+```yaml complete_user_inputs.yaml
+#_______ General Inputs ________
+DEBUG: false
+file_prefix: 3compartment
+input_param_file: 3compartment_parameters.csv
+model_type: cellml_only
+
+# Recommended: use a dedicated project directory
+resources_dir: /home/user/ca_projects/3compartment/resources
+generated_models_dir: /home/user/ca_projects/3compartment/generated_models
+param_id_output_dir: /home/user/ca_projects/3compartment/param_id_output
+
+#_______ Simulation Settings ________
+dt: 0.01
+pre_time: 20
+sim_time: 2
+
+solver: CVODE
+solver_info:
+  MaximumStep: 0.0001
+  MaximumNumberOfSteps: 5000
+
+#_______ Parameter Identification ________
+param_id_method: genetic_algorithm
+param_id_obs_path: /home/user/ca_projects/3compartment/resources/3compartment_obs_data.json
+
+optimiser_options:
+  num_calls_to_function: 10000
+  cost_convergence: 0.001
+  max_patience: 10
+  cost_type: MSE
+
+debug_optimiser_options:
+  num_calls_to_function: 30
+  cost_convergence: 0.001
+  cost_type: MSE
+
+#_______ MCMC ________
+do_mcmc: true
+
+mcmc_options:
+  num_steps: 1000
+  num_walkers: 64
+  cost_type: MSE
+  cost_convergence: 0.001
+
+debug_mcmc_options:
+  num_steps: 5
+  num_walkers: 40
+  cost_type: MSE
+  cost_convergence: 0.001
+
+#_______ Analysis ________
+do_sensitivity: false
+do_ia: true
+
+ia_options:
+  method: Laplace
+
+plot_predictions: true
+```
+
+## Configuration Validation
+
+When you run autogeneration or parameter identification, the system validates your configuration:
+
+✓ Required fields are present (`file_prefix`, `input_param_file`)
+
+✓ Specified directories exist or can be created
+
+✓ Input files exist at the specified paths
+
+✓ Numeric values are within valid ranges
+
+✓ Solver options are compatible with `model_type`
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use absolute paths">
+    Always use absolute paths for `resources_dir`, `param_id_obs_path`, and other directory settings. This prevents issues when running scripts from different locations.
+  </Accordion>
+
+  <Accordion title="Start with DEBUG: true">
+    When setting up a new model, enable DEBUG mode to see detailed logs. Disable it for production runs.
+  </Accordion>
+
+  <Accordion title="Create project-specific configs">
+    Don't modify the default `user_run_files/user_inputs.yaml`. Instead, create project-specific YAML files and use `user_inputs_path_override`.
+  </Accordion>
+
+  <Accordion title="Separate debug and production settings">
+    Use `debug_optimiser_options` and `debug_mcmc_options` for quick tests. The full options are used when `DEBUG: false`.
+  </Accordion>
+
+  <Accordion title="Version control your configs">
+    Track your user_inputs.yaml files in git to document configuration changes alongside model changes.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Common Issues
+
+**"Could not find file [file]"**
+- Verify `resources_dir` path is absolute and exists
+- Check that `[file_prefix]_vessel_array.csv` exists in `resources_dir`
+- Ensure `input_param_file` matches the actual filename
+
+**"Invalid solver option"**
+- `MaximumStep` must be smaller than `dt`
+- Some solver options are only valid for specific `model_type` values
+
+**"Path override file not found"**
+- `user_inputs_path_override` must be an absolute path
+- Verify the file exists and is readable
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Run Autogeneration" icon="play" href="/generation/running-autogeneration">
+    Generate your model with these settings
+  </Card>
+  <Card title="Parameter ID Configuration" icon="target" href="/param-id/configuration">
+    Configure parameter identification
+  </Card>
+</CardGroup>

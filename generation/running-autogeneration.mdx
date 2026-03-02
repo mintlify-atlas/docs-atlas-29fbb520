@@ -1,0 +1,453 @@
+---
+title: Running Autogeneration
+description: How to generate CellML models using run_autogeneration.sh and IDE setup options
+---
+
+Model autogeneration transforms your vessel array, parameters, and configuration into executable CellML (and optionally Python or C++) models. This guide covers both command-line and IDE-based generation workflows.
+
+## Prerequisites
+
+Before running autogeneration, ensure you have:
+
+<Steps>
+  <Step title="OpenCOR Python environment set up">
+    Follow the [Installation guide](/installation) to configure OpenCOR's Python environment
+  </Step>
+  
+  <Step title="Configuration complete">
+    `user_inputs.yaml` configured with:
+    - `file_prefix` set to your model name
+    - `resources_dir` pointing to your input files
+    - `input_param_file` specified
+  </Step>
+  
+  <Step title="Input files created">
+    Both files exist in `resources_dir`:
+    - `[file_prefix]_vessel_array.csv`
+    - `[file_prefix]_parameters.csv` (can be minimal/empty)
+  </Step>
+</Steps>
+
+## Method 1: Command Line (Recommended)
+
+### Using the Run Script
+
+The simplest way to generate models is using the provided bash script:
+
+```bash
+cd /path/to/circulatory_autogen/user_run_files
+./run_autogeneration.sh
+```
+
+### What the Script Does
+
+The script performs three key steps:
+
+<Steps>
+  <Step title="Source OpenCOR Python path">
+    Reads `opencor_pythonshell_path.sh` to configure the Python environment
+  </Step>
+  
+  <Step title="Run generation script">
+    Executes `script_generate_with_new_architecture.py` with the False argument (don't use fitted parameters)
+  </Step>
+  
+  <Step title="Validate model">
+    Tests that the generated CellML model is valid and can be simulated
+  </Step>
+</Steps>
+
+### Expected Output
+
+Successful autogeneration produces output like:
+
+```bash
+Generating model files at /path/to/generated_models/3compartment
+Generating CellML file 3compartment.cellml
+writing units mapping
+writing imports
+writing vessel mappings
+writing environment to sum venous input flows
+writing environment to sum generic junctions input flows
+writing environment to apply operations for multiports
+writing variable access
+writing global params variable access
+writing mappings between computational environment and modules
+writing mappings between computational environment and modules for global parameters
+writing mappings between constant params
+writing writing time mappings between environment and modules
+Generating CellML file 3compartment_parameters.cellml
+Generating CellML file 3compartment_units.cellml
+Generating modules file 3compartment_modules.cellml
+Model generation complete.
+Checking Status of Model
+analysed model has type AnalyserModel.Type.ODE . Is it ODE type? True
+Testing to see if model opens in OpenCOR
+Model generation has been successful.
+```
+
+<Note>
+The analysis step uses libCellML to verify the model is a valid ordinary differential equation (ODE) system. If you see `Is it ODE type? True`, your model structure is correct.
+</Note>
+
+### Common Output Messages
+
+**Success:**
+```
+Model generation has been successful.
+```
+
+**Missing parameters:**
+```
+WARNING
+Required parameters are missing.
+Creating a file /path/to/resources/3compartment_parameters_unfinished.csv,
+which has EMPTY_MUST_BE_FILLED tags where parameters
+need to be included.
+```
+→ See [Handling Missing Parameters](#handling-missing-parameters) below
+
+**Model validation issues:**
+```
+WARNING model has some issues, see above.
+The model might still run with some of the above issues
+but it is recommended to fix them.
+```
+→ Check the output for specific CellML errors and fix module configurations
+
+## Method 2: IDE Execution
+
+For development and debugging, you can run autogeneration directly from an IDE:
+
+### Setup
+
+<Steps>
+  <Step title="Configure Python interpreter">
+    Set your IDE's Python interpreter to the OpenCOR Python shell path from `opencor_pythonshell_path.sh`:
+    
+    ```bash
+    # Example path
+    /usr/local/OpenCOR/python/bin/python
+    ```
+  </Step>
+  
+  <Step title="Open the generation script">
+    Navigate to:
+    ```
+    [project_dir]/src/scripts/script_generate_with_new_architecture.py
+    ```
+  </Step>
+  
+  <Step title="Run the script">
+    Execute with argument `False` to generate from original parameters (not fitted values)
+  </Step>
+</Steps>
+
+### IDE-Specific Instructions
+
+<CodeGroup>
+```python PyCharm
+# 1. Set interpreter:
+# File → Settings → Project → Python Interpreter
+# Add Interpreter → System Interpreter → Browse to OpenCOR python
+
+# 2. Edit run configuration:
+# Run → Edit Configurations
+# Script path: [project_dir]/src/scripts/script_generate_with_new_architecture.py  
+# Parameters: False
+# Working directory: [project_dir]
+
+# 3. Run
+```
+
+```python VS Code
+# 1. Create .vscode/settings.json:
+{
+  "python.defaultInterpreterPath": "/usr/local/OpenCOR/python/bin/python"
+}
+
+# 2. Create .vscode/launch.json:
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Generate Model",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/scripts/script_generate_with_new_architecture.py",
+      "args": ["False"],
+      "console": "integratedTerminal"
+    }
+  ]
+}
+
+# 3. Run with F5 or Debug menu
+```
+
+```python Spyder
+# 1. Tools → Preferences → Python interpreter
+# Select: Use the following Python interpreter
+# Enter: /usr/local/OpenCOR/python/bin/python
+
+# 2. Open script_generate_with_new_architecture.py
+
+# 3. Set command line arguments:
+# Run → Configuration per file
+# Command line options: False
+
+# 4. Run file (F5)
+```
+</CodeGroup>
+
+### Benefits of IDE Method
+
+- **Debugging**: Set breakpoints in generation code
+- **Inspection**: Examine intermediate data structures
+- **Rapid iteration**: Modify and re-run without switching to terminal
+- **Error tracking**: Better error messages and stack traces
+
+## Handling Missing Parameters
+
+If you run autogeneration with incomplete parameters, the system helps you:
+
+<Steps>
+  <Step title="Autogeneration detects missing params">
+    Script analyzes your vessel array and module configs to determine all required parameters
+  </Step>
+  
+  <Step title="Unfinished file is created">
+    Creates `[resources_dir]/[file_prefix]_parameters_unfinished.csv` with:
+    - All required parameters listed
+    - Missing values marked as `EMPTY_MUST_BE_FILLED`
+    - Correct units from module configs
+    - Placeholder `EMPTY_MUST_BE_FILLED` for data_reference
+  </Step>
+  
+  <Step title="Fill in values">
+    Edit the unfinished file:
+    ```csv
+    variable_name,units,value,data_reference
+    R_pvn,Js_per_m6,EMPTY_MUST_BE_FILLED,EMPTY_MUST_BE_FILLED
+    C_pvn,m6_per_J,EMPTY_MUST_BE_FILLED,EMPTY_MUST_BE_FILLED
+    ```
+    
+    Becomes:
+    ```csv  
+    variable_name,units,value,data_reference
+    R_pvn,Js_per_m6,1333000,Blanco_2013_Table_8
+    C_pvn,m6_per_J,6.0015e-9,to_be_identified
+    ```
+  </Step>
+  
+  <Step title="Rename and re-run">
+    Remove `_unfinished` from filename:
+    ```bash
+    mv 3compartment_parameters_unfinished.csv 3compartment_parameters.csv
+    ./run_autogeneration.sh
+    ```
+  </Step>
+</Steps>
+
+<Note>
+The unfinished file includes ALL required parameters, even those already in your original parameters file. You can copy values from your original file or use this as an opportunity to verify all parameters are correct.
+</Note>
+
+## Testing Generated Models
+
+### Automatic Validation
+
+Autogeneration automatically tests the model:
+
+<CodeGroup>
+```python OpenCOR Test (Default)
+# If OpenCOR Python is available:
+import opencor as oc
+sim = oc.open_simulation('3compartment.cellml')
+if sim.valid():
+    print('Model generation has been successful.')
+```
+
+```python Python Test (Fallback)
+# If OpenCOR unavailable:
+# Generate Python module from CellML
+# Run for 0.00001 seconds
+# Verify no errors
+print('Model generation has been successful.')
+```
+</CodeGroup>
+
+### Manual Testing
+
+After generation, you can manually test in OpenCOR:
+
+<Steps>
+  <Step title="Open OpenCOR">
+    Launch the OpenCOR application
+  </Step>
+  
+  <Step title="Open generated model">
+    File → Open → Navigate to:
+    ```
+    generated_models/[file_prefix]/[file_prefix].cellml
+    ```
+  </Step>
+  
+  <Step title="Switch to Simulation tab">
+    Click **Simulation** tab. If the model has errors, they'll be displayed here.
+  </Step>
+  
+  <Step title="Configure simulation">
+    Set:
+    - Starting point: 0
+    - Ending point: 2 (for 2 seconds)
+    - Point interval: 0.01
+  </Step>
+  
+  <Step title="Run simulation">
+    Click the ▶️ Run button. Verify the simulation completes without errors.
+  </Step>
+</Steps>
+
+## Advanced Options
+
+### Generating from Fitted Parameters
+
+After parameter identification, regenerate the model with fitted values:
+
+```bash
+cd user_run_files
+./run_autogeneration.sh True
+```
+
+Or in Python:
+```python
+python src/scripts/script_generate_with_new_architecture.py True
+```
+
+This reads fitted parameters from `param_id_output/[file_prefix]/predicted_params.csv` and generates a model with optimized parameter values.
+
+### Batch Generation
+
+To generate multiple models:
+
+```bash
+#!/bin/bash
+# generate_all_models.sh
+
+models=("3compartment" "cerebral" "systemic_detailed")
+
+for model in "${models[@]}"; do
+  echo "Generating $model..."
+  # Temporarily update file_prefix in user_inputs.yaml
+  sed -i "s/file_prefix: .*/file_prefix: $model/" user_run_files/user_inputs.yaml
+  cd user_run_files
+  ./run_autogeneration.sh
+  cd ..
+done
+
+echo "All models generated"
+```
+
+### Custom User Inputs Path
+
+Generate with a specific configuration file:
+
+```python
+import sys
+sys.path.append('src')
+from scripts.script_generate_with_new_architecture import generate_with_new_architecture
+
+inp_data_dict = {
+    'user_inputs_path': '/path/to/custom_user_inputs.yaml'
+}
+
+generate_with_new_architecture(do_generation_with_fit_parameters=False, 
+                               inp_data_dict=inp_data_dict)
+```
+
+## Continuous Integration
+
+For automated testing, add model generation to your CI pipeline:
+
+```yaml .github/workflows/test-models.yml
+name: Test Model Generation
+
+on: [push, pull_request]
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Install OpenCOR
+        run: |
+          wget https://opencor.ws/downloads/OpenCOR-x86_64.tar.gz
+          tar xzf OpenCOR-x86_64.tar.gz
+          
+      - name: Set up Python path
+        run: |
+          echo "opencor_pythonshell_path=$(pwd)/OpenCOR/python/bin/python" > user_run_files/opencor_pythonshell_path.sh
+          
+      - name: Generate 3compartment model
+        run: |
+          cd user_run_files
+          ./run_autogeneration.sh
+          
+      - name: Check outputs exist
+        run: |
+          test -f generated_models/3compartment/3compartment.cellml
+          test -f generated_models/3compartment/3compartment_parameters.csv
+```
+
+## Troubleshooting
+
+### Script Fails Immediately
+
+**Problem:** `opencor_pythonshell_path.sh: No such file or directory`
+
+**Solution:** Create the file:
+```bash
+cd user_run_files
+echo 'opencor_pythonshell_path="/path/to/OpenCOR/python/bin/python"' > opencor_pythonshell_path.sh
+```
+
+### Import Errors
+
+**Problem:** `ModuleNotFoundError: No module named 'opencor'`
+
+**Solution:** Verify you're using OpenCOR's Python, not system Python:
+```bash
+which python
+# Should show OpenCOR path, not /usr/bin/python
+```
+
+### Model Not Valid
+
+**Problem:** `sim.valid()` returns False or model has warnings
+
+**Solution:**
+1. Check module config JSON files for port mismatches
+2. Verify all vessels in vessel_array exist in module configs
+3. Look for circular dependencies in vessel connections
+4. Open model in OpenCOR GUI to see specific error messages
+
+### Permission Denied
+
+**Problem:** `bash: ./run_autogeneration.sh: Permission denied`
+
+**Solution:**
+```bash
+chmod +x user_run_files/run_autogeneration.sh
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Output Files" icon="file" href="/generation/output-files">
+    Understand generated file structure
+  </Card>
+  <Card title="Simulation" icon="wave-pulse" href="/tutorials/basic-model">
+    Learn to simulate your model
+  </Card>
+</CardGroup>

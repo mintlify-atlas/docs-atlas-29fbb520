@@ -1,0 +1,209 @@
+---
+title: C++ Code Generation
+description: Generate high-performance C++ models from CellML and couple to 1D finite volume models
+---
+
+## Overview
+
+Circulatory Autogen can generate C++ code from CellML models for significantly faster execution compared to interpreted CellML. This is especially useful for:
+
+- Large-scale parameter identification
+- Coupling 0D models to 1D finite volume models
+- Long simulation times requiring optimal performance
+
+## Enabling C++ Generation
+
+In `user_inputs.yaml`, set the model type:
+
+```yaml user_run_files/user_inputs.yaml
+model_type: cpp
+```
+
+Available options:
+- `cellml_only` - Use CellML models directly (default, slower)
+- `cpp` - Generate and compile C++ code (faster)
+- `python` - Generate Python code (flexible, moderate speed)
+
+## C++ Output Directory
+
+Specify where generated C++ files should be written:
+
+```yaml user_run_files/user_inputs.yaml
+cpp_generated_models_dir: /path/to/output/cpp_models/
+```
+
+If not specified:
+- **Without 1D coupling**: Uses same directory as CellML models
+- **With 1D coupling**: Appends `_cpp` to the CellML model directory
+
+## Solver Configuration
+
+The C++ generator uses CVODE (from SUNDIALS) by default. Configure solver parameters:
+
+```yaml user_run_files/user_inputs.yaml
+solver: CVODE
+solver_info:
+  MaximumStep: 0.0001        # Maximum time step
+  MaximumNumberOfSteps: 5000 # Maximum integration steps
+```
+
+### Solver Options in C++
+
+The generator initializes CVODE with BDF (Backward Differentiation Formula) method:
+
+```cpp src/generators/CVSCppGenerator.py
+solver = CVodeCreate(CV_BDF, context);
+```
+
+You can modify the generated code to use:
+- `CV_BDF` - Stiff problems (default)
+- `CV_ADAMS` - Non-stiff problems
+
+## Coupling to 1D Finite Volume Models
+
+Circulatory Autogen supports coupling 0D lumped models to 1D finite volume models for arterial/venous networks.
+
+### Enable 1D Coupling
+
+```yaml user_run_files/user_inputs.yaml
+couple_to_1d: true
+cpp_1d_model_config_path: /path/to/1d_model/input1d.dat
+cpp_generated_models_dir: /path/to/fvm/
+```
+
+### How It Works
+
+1. **Port Variables**: The generator identifies connection points between 0D and 1D models
+2. **Boundary Conditions**: Supports both flow (`v`) and pressure (`p`) boundary conditions
+3. **Two-Way Coupling**: Variables are exchanged at each time step:
+   - 0D model receives pressure/flow from 1D model inlet/outlet
+   - 1D model receives flow/pressure boundary conditions from 0D model
+
+### Connection Configuration
+
+The generator parses vessel connections from your model configuration to identify:
+
+```python src/generators/CVSCppGenerator.py
+# Identifies FV1D vessels by name pattern or explicit index
+if out_vessel.startswith('FV1D_'):
+    fv1d_vessel_index = re.findall(r'\d+$', out_vessel)
+```
+
+**Example vessel naming:**
+- `FV1D_0` - 1D vessel at index 0
+- `FV1D_1` - 1D vessel at index 1
+
+### Port Input/Output Variables
+
+The C++ generator automatically extracts coupling variables:
+
+```python src/generators/CVSCppGenerator.py
+self.port_input_variables.append(self.cellml_model.component(vessel_tup.name 
+                                ).variable(exit_port["variables"][0]).id())
+self.port_output_variables.append(self.cellml_model.component(vessel_tup.name 
+                                ).variable(exit_port["variables"][1]).id())
+```
+
+### Boundary Condition Types
+
+For each connection, specify the BC type:
+
+```python
+if vessel_tup.BC_type[1] == 'v':
+    self.connection_vessel_flow_or_pressure_bc.append("flow")
+elif vessel_tup.BC_type[1] == 'p':
+    self.connection_vessel_flow_or_pressure_bc.append("pressure")
+```
+
+- **Flow BC** (`v`): 0D model outputs flow, receives pressure from 1D model
+- **Pressure BC** (`p`): 0D model outputs pressure, receives flow from 1D model
+
+### Volume Sum Coupling
+
+For total volume tracking across 1D vessels:
+
+```python src/generators/CVSCppGenerator.py
+if vessel_tup.vessel_type=="FV1D_volume_sum":
+    self.volume_sum_variables.append(self.cellml_model.component(vessel_tup.name 
+                                ).variable('q_sum').id())
+```
+
+This sums volumes across specified 1D segments for venous return calculations.
+
+## Generated C++ Structure
+
+### Main Components
+
+The generator produces:
+
+1. **model0d.h/cpp** - 0D model implementation (when `couple_to_1d=true`)
+2. **main.cpp** - Simulation driver (when `create_main=true`)
+3. **Annotations file** - RDF annotations for coupling metadata
+
+### External Headers
+
+When coupling to 1D models:
+
+```python src/generators/CVSCppGenerator.py
+if self.couple_to_1d and 'fvm' in cpp_generated_models_dir:
+    self.external_headers += ['model1d.h']
+```
+
+## Compilation
+
+The generated C++ code requires:
+
+- **SUNDIALS library** (for CVODE solver)
+- **LibCellML** (for CellML parsing)
+- **MPI** (if using 1D coupling with parallel FVM)
+- **PETSc** (for 1D finite volume solver)
+
+### Example Compilation
+
+```bash
+g++ -std=c++17 -O3 \
+    -I/path/to/sundials/include \
+    -I/path/to/libcellml/include \
+    -L/path/to/sundials/lib \
+    -L/path/to/libcellml/lib \
+    model0d.cpp main.cpp \
+    -lsundials_cvode -lsundials_nvecserial -lcellml \
+    -o simulation
+```
+
+## Performance Benefits
+
+Typical speedup factors:
+
+| Model Type | Relative Speed |
+|------------|----------------|
+| CellML (OpenCOR) | 1× (baseline) |
+| Python | 2-3× |
+| C++ | 10-50× |
+| C++ + 1D coupling | Varies by model complexity |
+
+## Debugging
+
+Enable debug output:
+
+```python src/generators/CVSCppGenerator.py
+DEBUG = True  # Set in generator initialization
+```
+
+This prints:
+- Delayed variable information
+- Port coupling details
+- External variable mappings
+- Volume sum connections
+
+## Limitations
+
+- C++ generation requires LibCellML to be available
+- 1D coupling is currently limited to finite volume models
+- Generated code assumes specific solver interfaces
+
+## Next Steps
+
+- Learn about [Python Model Generation](/advanced/python-models) for more flexibility
+- Deploy on [HPC Systems](/advanced/hpc-deployment) with MPI
+- Create [Custom Functions](/advanced/custom-functions) for specialized coupling logic

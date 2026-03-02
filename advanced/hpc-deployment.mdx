@@ -1,0 +1,182 @@
+---
+title: HPC Deployment
+description: Running Circulatory Autogen on High-Performance Computing clusters with MPI parallelization
+---
+
+## Overview
+
+Circulatory Autogen supports parallel execution on HPC systems using MPI (Message Passing Interface). This enables efficient parameter identification and sensitivity analysis across multiple cores.
+
+## ABI HPC Standard Setup
+
+If you're running on the ABI HPC cluster, you can use a pre-installed OpenCOR with all necessary libraries.
+
+### Configuration
+
+1. Clone the circulatory_autogen repository into your chosen directory
+
+2. Update the OpenCOR path in `opencor_pythonshell_path.sh`:
+
+```bash
+opencor_pythonshell_path=/hpc/farg967/OpenCOR-0-8-3-Linux/pythonshell
+```
+
+### Loading MPI
+
+Before running parallel jobs, load the MPI module from the `user_run_files` directory:
+
+```bash
+. load_mpi.sh
+```
+
+This script executes:
+
+```bash user_run_files/load_mpi.sh
+module load mpi/mpich-x86_64 && echo "successfully loaded mpi/mpich-x86_64"
+```
+
+### Running Parallel Jobs
+
+Once MPI is loaded, run your analysis with the desired number of cores:
+
+```bash
+./run_param_id.sh <NUM_CORES>
+```
+
+or
+
+```bash
+./run_sensitivity_analysis.sh <NUM_CORES>
+```
+
+**Example:**
+```bash
+./run_param_id.sh 16  # Run parameter identification on 16 cores
+```
+
+## Custom HPC Setup
+
+If you need specific Python libraries not available in the pre-installed OpenCOR:
+
+### Install Separate OpenCOR
+
+1. Download and install OpenCOR following the [Getting Started](/installation) guide
+
+2. Install required Python libraries using OpenCOR's Python environment
+
+### Installing mpi4py
+
+<Warning>
+Before installing `mpi4py`, you must load the MPI module:
+
+```bash
+module load mpi/mpich-x86_64 && echo "successfully loaded mpi/mpich-x86_64"
+```
+
+Then install mpi4py through OpenCOR's pip.
+</Warning>
+
+## Batch Script Structure
+
+The parallel execution scripts follow this pattern:
+
+```bash user_run_files/run_param_id.sh
+if [[ $# -eq 0 ]] ; then
+    echo 'usage is ./run_param_id.sh num_processors'
+    exit 1
+fi
+source opencor_pythonshell_path.sh
+./run_autogeneration.sh
+
+# Check the exit status of the previous command
+if [ $? -eq 0 ]; then
+  echo "Autogeneration completed successfully."
+
+  mpiexec -n $1 ${opencor_pythonshell_path} ../src/scripts/param_id_run_script.py
+
+else
+  echo "Error: Autogeneration failed. Aborting."
+  exit 1
+fi
+```
+
+### Key Components:
+
+1. **Argument validation** - Ensures number of cores is specified
+2. **Path sourcing** - Loads the OpenCOR Python shell path
+3. **Autogeneration** - Generates the model before parallel execution
+4. **MPI execution** - Runs the script across specified cores using `mpiexec`
+
+## SLURM Integration
+
+For clusters using SLURM, create a submission script:
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=circulatory_autogen
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=16
+#SBATCH --time=24:00:00
+#SBATCH --mem=32GB
+
+module load mpi/mpich-x86_64
+cd user_run_files
+./run_param_id.sh 16
+```
+
+Submit with:
+```bash
+sbatch job_script.sh
+```
+
+## Performance Considerations
+
+### Optimal Core Count
+
+- **Parameter identification**: Scales well with the number of parameters being identified
+- **Sensitivity analysis**: Scales with number of parameters × number of samples
+- Typically efficient up to 32-64 cores depending on problem size
+
+### Memory Requirements
+
+- Each MPI process loads the model independently
+- Estimate: ~500MB-2GB per core depending on model complexity
+- Monitor memory usage during initial runs to optimize allocation
+
+## Troubleshooting
+
+### MPI Not Found
+
+If you get an error about `mpiexec` not being found:
+
+```bash
+# Check if MPI is loaded
+which mpiexec
+
+# If not found, load the module
+module load mpi/mpich-x86_64
+```
+
+### OpenCOR Path Issues
+
+Verify your `opencor_pythonshell_path.sh` points to the correct installation:
+
+```bash
+cat opencor_pythonshell_path.sh
+${opencor_pythonshell_path} --version
+```
+
+### Import Errors
+
+If you encounter missing Python packages:
+
+```bash
+# Use OpenCOR's pip to install
+${opencor_pythonshell_path} -m pip install <package_name>
+```
+
+## Next Steps
+
+- Learn about [C++ Code Generation](/advanced/cpp-generation) for faster execution
+- Explore [Python Model Generation](/advanced/python-models) for flexibility
+- Create [Custom Functions](/advanced/custom-functions) for specialized analysis

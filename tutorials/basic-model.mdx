@@ -1,0 +1,246 @@
+---
+title: "Creating a Basic Circulatory Model"
+description: "Step-by-step tutorial to build your first circulatory model from scratch"
+---
+
+This tutorial walks you through creating a simple circulatory model from scratch using Circulatory Autogen.
+
+## Prerequisites
+
+- OpenCOR Python environment set up (see [Getting Started](/installation))
+- Basic understanding of CSV file formats
+- Familiarity with cardiovascular system anatomy
+
+## Overview
+
+You'll create a minimal circulatory model with:
+- A vessel array file defining the model structure
+- A parameters file with model constants
+- Generated CellML files ready for simulation
+
+## Step 1: Set up your workspace
+
+Create a directory for your model files:
+
+<Steps>
+  <Step title="Create a resources directory">
+    Create a directory to store your model configuration files:
+    
+    ```bash
+    mkdir -p ~/my_model/resources
+    cd ~/my_model
+    ```
+  </Step>
+  
+  <Step title="Create a user_inputs.yaml file">
+    Create `my_model_user_inputs.yaml` in your model directory:
+    
+    ```yaml my_model_user_inputs.yaml
+    file_prefix: my_model
+    resources_dir: ./resources
+    generated_models_dir: ./generated_models
+    model_type: cellml_only
+    input_param_file: my_model_parameters.csv
+    ```
+  </Step>
+</Steps>
+
+## Step 2: Design the vessel array
+
+The vessel array file defines your model's structure - how vessels connect to each other.
+
+<Steps>
+  <Step title="Understand vessel array columns">
+    Each row represents a vessel/module in your system with these columns:
+    
+    - **name**: User-chosen name (e.g., "heart", "aorta")
+    - **BC_type**: Boundary condition type ("vv", "vp", "pv", "pp")
+      - First letter: input boundary (v=flow, p=pressure)
+      - Second letter: output boundary (v=flow, p=pressure)
+    - **vessel_type**: Module type from config files
+    - **inp_vessels**: Input vessel names (comma-separated if multiple)
+    - **out_vessels**: Output vessel names (comma-separated if multiple)
+    
+    <Note>
+      A vessel with output flow BC must connect to a vessel with input pressure BC and vice versa.
+    </Note>
+  </Step>
+  
+  <Step title="Create your vessel array file">
+    Create `resources/my_model_vessel_array.csv`:
+    
+    ```csv my_model_vessel_array.csv
+    name,BC_type,vessel_type,inp_vessels,out_vessels
+    aorta,vv,arterial_simple,heart,systemic
+    systemic,pp,terminal,aorta,vena_cava
+    vena_cava,vp,venous,systemic,heart
+    heart,vp_Ca,heart,vena_cava,aorta
+    ```
+    
+    This creates a simple loop: heart → aorta → systemic → vena_cava → heart
+  </Step>
+</Steps>
+
+## Step 3: Define parameters
+
+Every module requires specific parameters. If you don't know all parameters initially, run autogeneration once - it will create a template.
+
+<Steps>
+  <Step title="Create initial parameters file">
+    Create `resources/my_model_parameters.csv` with basic structure:
+    
+    ```csv my_model_parameters.csv
+    variable_name,units,value,data_reference
+    T,second,1.0,Liang_2009_Table_2
+    rho,Js2_per_m5,1050,known
+    ```
+  </Step>
+  
+  <Step title="Run autogeneration to find missing parameters">
+    Navigate to your Circulatory Autogen installation and update `user_run_files/user_inputs.yaml`:
+    
+    ```yaml
+    user_inputs_path_override: /path/to/my_model/my_model_user_inputs.yaml
+    ```
+    
+    Then run:
+    
+    ```bash
+    cd [project_dir]/user_run_files
+    ./run_autogeneration.sh
+    ```
+    
+    If parameters are missing, the script creates `my_model_parameters_unfinished.csv` with entries marked `EMPTY_MUST_BE_FILLED`.
+  </Step>
+  
+  <Step title="Complete your parameters file">
+    Fill in the missing values in the unfinished file or add them to your original parameters.csv.
+    
+    Parameter naming convention:
+    - **Constants**: `[variable_name]_[vessel_name]` (e.g., `R_aorta`)
+    - **Global constants**: Just `[variable_name]` (e.g., `rho`, `T`)
+    
+    Example complete parameters file:
+    
+    ```csv my_model_parameters.csv
+    variable_name,units,value,data_reference
+    R_aorta,Js_per_m6,1000000,user_defined
+    C_aorta,m6_per_J,0.000000012,user_defined
+    I_aorta,Js2_per_m6,10000,user_defined
+    u_ext_aorta,J_per_m3,0,user_defined
+    R_T_systemic,Js_per_m6,110000000,user_defined
+    C_T_systemic,m6_per_J,0.0000001,user_defined
+    u_ext_systemic,J_per_m3,0,user_defined
+    q_us_systemic,m3,0.0024,user_defined
+    q_init_systemic,m3,0.0024,user_defined
+    R_vena_cava,Js_per_m6,1114600,user_defined
+    C_vena_cava,m6_per_J,0.000001,user_defined
+    I_vena_cava,Js2_per_m6,0.01,user_defined
+    u_ext_vena_cava,J_per_m3,0,user_defined
+    q_C_init_vena_cava,m3,0.0013,user_defined
+    T,second,1.0,Liang_2009_Table_2
+    rho,Js2_per_m5,1050,known
+    ```
+  </Step>
+</Steps>
+
+## Step 4: Generate and simulate
+
+<Steps>
+  <Step title="Run autogeneration">
+    With your vessel array and parameters files complete, run:
+    
+    ```bash
+    cd [project_dir]/user_run_files
+    ./run_autogeneration.sh
+    ```
+    
+    You should see:
+    ```
+    Model generation has been successful.
+    ```
+  </Step>
+  
+  <Step title="Locate generated files">
+    Your generated model files are in `~/my_model/generated_models/my_model/`:
+    
+    - `my_model.cellml` - Main model file
+    - `my_model_modules.cellml` - Module definitions
+    - `my_model_parameters.cellml` - Parameter values
+    - `my_model_units.cellml` - Unit definitions
+    - `my_model_parameters.csv` - Parameter reference
+  </Step>
+  
+  <Step title="Simulate in OpenCOR">
+    1. Open OpenCOR
+    2. Open `my_model.cellml`
+    3. Click the **Simulation** tab
+    4. Set simulation parameters:
+       - Starting point: 0
+       - Ending point: 10 (seconds)
+       - Point interval: 0.01
+    5. Click the run button (▶)
+    6. Right-click variables to plot them against time
+  </Step>
+</Steps>
+
+## Understanding the results
+
+After simulation, you can visualize:
+- Flow rates through vessels
+- Pressures at different points
+- Volumes in compliant vessels
+
+Key variables to examine:
+- `v_[vessel_name]` - Flow rate
+- `u_[vessel_name]` - Pressure
+- `q_[vessel_name]` - Volume (for compliant vessels)
+
+<Note>
+  Before calibration, your model outputs may not match physiological values. See [Parameter Identification](/param-id/overview) to fit your model to real data.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="3-Compartment Example" icon="diagram-project" href="/tutorials/3compartment-example">
+    Explore a more complex example with detailed explanations
+  </Card>
+  
+  <Card title="Custom Modules" icon="puzzle-piece" href="/tutorials/custom-modules">
+    Learn to create your own CellML modules
+  </Card>
+  
+  <Card title="Parameter Identification" icon="bullseye" href="/param-id/overview">
+    Calibrate your model to match real data
+  </Card>
+  
+  <Card title="Model Simulation" icon="play" href="/generation/output-files">
+    Learn advanced simulation techniques
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: Missing parameters">
+    If you see `EMPTY_MUST_BE_FILLED` in the unfinished parameters file:
+    1. Fill in values based on literature or estimates
+    2. Add data references for traceability
+    3. Copy completed entries to your parameters.csv
+    4. Re-run autogeneration
+  </Accordion>
+  
+  <Accordion title="Error: Incorrect BC connections">
+    If you see an error about boundary condition mismatches:
+    - Check that vessels with output flow ("v" as second letter) connect to vessels with input pressure ("p" as first letter)
+    - Verify your vessel connections in the vessel_array.csv file
+  </Accordion>
+  
+  <Accordion title="Simulation fails in OpenCOR">
+    If the simulation doesn't run:
+    - Check for very large or very small parameter values
+    - Reduce the maximum step size in solver settings
+    - Verify initial conditions are physiologically reasonable
+  </Accordion>
+</AccordionGroup>

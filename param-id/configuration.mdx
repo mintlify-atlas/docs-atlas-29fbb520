@@ -1,0 +1,360 @@
+---
+title: Configuration
+description: Configure parameter identification with params_for_id.csv, parameter bounds, and optimiser_options
+---
+
+Parameter identification requires two main configuration files and settings in `user_inputs.yaml`.
+
+## params_for_id.csv Format
+
+The `params_for_id.csv` file defines which model parameters to optimize and their allowed ranges (uniform prior distribution).
+
+### File Location
+
+Place in your `resources/` directory:
+```
+resources/[file_prefix]_params_for_id.csv
+```
+
+Or specify a custom path in `user_inputs.yaml`:
+```yaml
+params_for_id_file: /custom/path/to/params_for_id.csv
+```
+
+### CSV Format
+
+```csv
+vessel_name,    param_name,    param_type,  min,      max,       name_for_plotting
+global,         q_lv_init,     const,       200e-6,   1500e-6,   q_{sbv}
+aortic_root,    C,             const,       1e-9,     5e-8,      C_{ao}
+global,         E_lv_A,        const,       1e8,      5e8,       E_{lvA}
+global,         E_lv_B,        const,       1e6,      5e7,       E_{lvB}
+```
+
+### Column Descriptions
+
+<ParamField path="vessel_name" type="string" required>
+  The name of the vessel/module containing the parameter. Use `global` for parameters not specific to a vessel.
+</ParamField>
+
+<ParamField path="param_name" type="string" required>
+  Parameter name in the CellML module (without the `vessel_name` suffix that appears in `[file_prefix]_parameters.csv`).
+</ParamField>
+
+<ParamField path="param_type" type="string" required>
+  Type of parameter:
+  - `const`: Constant parameter or initial state value
+  - `state`: **Deprecated** - use `const` instead
+  
+  <Note>
+  `param_type: state` is deprecated. All parameters should be `const`. If you need to identify initial state values, define them as constants in your CellML module.
+  </Note>
+</ParamField>
+
+<ParamField path="min" type="float" required>
+  Minimum value for the parameter (lower bound of uniform distribution).
+</ParamField>
+
+<ParamField path="max" type="float" required>
+  Maximum value for the parameter (upper bound of uniform distribution).
+</ParamField>
+
+<ParamField path="name_for_plotting" type="string" required>
+  Display name for plots in LaTeX format (e.g., `C_{ao}`, `q_{sbv}`).
+</ParamField>
+
+### Example
+
+```csv
+vessel_name,          param_name,       param_type,  min,        max,        name_for_plotting
+global,               q_lv_init,        const,       200e-6,     1500e-6,    q_{lv}
+aortic_root,          C,                const,       1e-9,       5e-8,       C_{AR}
+aortic_root,          R,                const,       1e6,        1e8,        R_{AR}
+global,               E_lv_A,           const,       1e8,        5e8,        E_{lvA}
+global,               E_lv_B,           const,       1e6,        5e7,        E_{lvB}
+```
+
+<Info>
+Future versions will support other prior distributions beyond uniform.
+</Info>
+
+## Parameter Bounds
+
+### Choosing Bounds
+
+Parameter bounds define the search space for optimization:
+
+- **Too narrow**: May not include the optimal value
+- **Too wide**: Slower convergence, may explore unrealistic values
+- **Physiologically reasonable**: Best practice - use known ranges from literature
+
+### Initial Values
+
+Optimizers use initial parameter values from `[file_prefix]_parameters.csv`:
+
+- **Genetic Algorithm**: Generates random population within bounds
+- **CMA-ES**: Starts from parameters CSV values (if within bounds)
+- **Bayesian**: Uses random initialization points
+
+Ensure your parameters CSV has reasonable starting values within the specified bounds.
+
+## optimiser_options in user_inputs.yaml
+
+Configure optimization behavior in `user_inputs.yaml`:
+
+### Common Options (All Optimizers)
+
+These options apply to all optimization methods:
+
+```yaml
+optimiser_options:
+  # Maximum number of forward simulations
+  num_calls_to_function: 10000  # default: 10000
+  
+  # Convergence tolerance - stop if cost below this value
+  cost_convergence: 0.001       # default: 0.0001
+  
+  # Patience - stop if no improvement for this many iterations
+  max_patience: 10              # default: 10
+  
+  # Cost function type
+  cost_type: MSE                # 'MSE' or 'AE' (mean squared error or absolute error)
+```
+
+<ParamField path="num_calls_to_function" type="integer" default="10000">
+  Maximum number of model simulations to run during optimization. Higher values allow more thorough search but take longer.
+</ParamField>
+
+<ParamField path="cost_convergence" type="float" default="0.0001">
+  If the cost value drops below this threshold, calibration is considered complete and optimization stops.
+</ParamField>
+
+<ParamField path="max_patience" type="integer" default="10">
+  If the cost doesn't improve for this many iterations/generations, optimization stops (assumes convergence to local minimum).
+</ParamField>
+
+<ParamField path="cost_type" type="string" default="MSE">
+  Type of cost function:
+  - `MSE`: Mean squared error
+  - `AE`: Absolute error
+  
+  Both are normalized by the standard deviation specified in `obs_data.json`.
+</ParamField>
+
+### CMA-ES Specific Options
+
+Additional options for the CMA-ES optimizer:
+
+```yaml
+param_id_method: CMA-ES
+
+optimiser_options:
+  num_calls_to_function: 10000
+  cost_convergence: 0.001
+  max_patience: 10
+  
+  # CMA-ES specific:
+  sigma0: 0.1  # optional, initial standard deviation
+```
+
+<ParamField path="sigma0" type="float" default="0.2 * mean(param_range)">
+  Initial standard deviation for CMA-ES algorithm. Controls the initial step size for parameter exploration.
+  
+  - **Default**: 20% of the mean parameter range
+  - **Smaller values**: More conservative, slower exploration
+  - **Larger values**: More aggressive, faster initial exploration
+</ParamField>
+
+<Note>
+**CMA-ES Notes:**
+- Number of parallel workers is automatically determined from MPI processes
+- Initial parameter values (x0) are loaded from `[file_prefix]_parameters.csv`
+- Requires `nevergrad` package: `pip install nevergrad`
+</Note>
+
+### Legacy ga_options
+
+For backward compatibility, `ga_options` is still supported:
+
+```yaml
+ga_options:
+  cost_type: MSE
+  num_calls_to_function: 10000
+  cost_convergence: 0.001
+  max_patience: 10
+```
+
+<Warning>
+`ga_options` is deprecated. Use `optimiser_options` instead. If both are present, `ga_options` entries are merged into `optimiser_options` (with `optimiser_options` taking precedence).
+</Warning>
+
+## Simulation Settings
+
+Configure simulation time and output:
+
+```yaml
+# Output (sampling) time step for model outputs
+dt: 0.01
+
+# Time to simulate before comparing to observables (reach steady state)
+pre_time: 20  # Can be overridden by protocol_info in obs_data.json
+
+# Simulation time for comparing outputs to observables
+sim_time: 2   # Can be overridden by protocol_info in obs_data.json
+```
+
+<ParamField path="dt" type="float" required>
+  Output time step for saving model results. Should be smaller than or equal to all `obs_dt` values in your `obs_data.json`.
+</ParamField>
+
+<ParamField path="pre_time" type="float" default="20">
+  Simulation time before data comparison begins. Used to reach steady state or periodic behavior.
+  
+  <Info>
+  This is overridden by `pre_times` in the `protocol_info` section of `obs_data.json` if specified there.
+  </Info>
+</ParamField>
+
+<ParamField path="sim_time" type="float" default="2">
+  Total simulation time for comparing model output to observables.
+  
+  <Info>
+  For frequency domain fitting, ensure this equals one complete period of the periodic signal.
+  </Info>
+</ParamField>
+
+## Solver Configuration
+
+Choose and configure the numerical solver:
+
+```yaml
+solver: CVODE  # OpenCOR CVODE (default for CellML models)
+
+solver_info:
+  # Maximum time step for adaptive solvers
+  MaximumStep: 0.0001
+  
+  # Maximum substeps before solver gives up
+  MaximumNumberOfSteps: 5000
+```
+
+### Available Solvers
+
+<Tabs>
+  <Tab title="CellML Models">
+    ```yaml
+    # OpenCOR CVODE (default)
+    solver: CVODE
+    solver_info:
+      MaximumStep: 0.0001
+      MaximumNumberOfSteps: 5000
+    ```
+    
+    or
+    
+    ```yaml
+    # Myokit CVODE
+    solver: CVODE_myokit
+    solver_info:
+      dt_solver: 0.0001  # Sets MaximumStep when provided
+    ```
+  </Tab>
+  
+  <Tab title="Python Models">
+    ```yaml
+    model_type: python
+    solver: solve_ivp
+    
+    solver_info:
+      method: BDF  # RK45, LSODA, Radau, etc.
+      dt_solver: 0.0001
+    ```
+  </Tab>
+  
+  <Tab title="C++ Models">
+    ```yaml
+    model_type: cpp
+    solver: CVODE  # or RK4, PETSC
+    
+    solver_info:
+      dt_solver: 0.0001
+      MaximumStep: 0.0001
+    ```
+  </Tab>
+</Tabs>
+
+<ParamField path="solver_info.MaximumStep" type="float">
+  Maximum step size for adaptive solvers (CVODE). Smaller values increase accuracy but slow down simulation.
+</ParamField>
+
+<ParamField path="solver_info.dt_solver" type="float">
+  Solver time step. For CVODE, this sets `MaximumStep` when provided.
+</ParamField>
+
+<ParamField path="solver_info.MaximumNumberOfSteps" type="integer">
+  Maximum number of substeps the solver can take before reporting an error.
+</ParamField>
+
+<ParamField path="solver_info.method" type="string">
+  For `solve_ivp` only. Options: `RK45`, `BDF`, `LSODA`, `Radau`, `DOP853`.
+</ParamField>
+
+## Debug Mode
+
+Use debug mode for faster testing with reduced population sizes:
+
+```yaml
+DEBUG: true
+
+debug_optimiser_options:
+  num_calls_to_function: 30
+  cost_convergence: 0.001
+  cost_type: MSE
+```
+
+When `DEBUG: true`, the genetic algorithm uses smaller population sizes:
+- `num_elite: 4` (instead of 12)
+- `num_survivors: 6` (instead of 48)
+- `num_mutations_per_survivor: 2` (instead of 12)
+- `num_cross_breed: 10` (instead of 120)
+
+## Complete Example
+
+```yaml
+# user_inputs.yaml
+file_prefix: 3compartment
+model_type: cellml_only
+
+param_id_method: genetic_algorithm
+param_id_obs_path: /path/to/resources/3compartment_obs_data.json
+
+dt: 0.01
+pre_time: 20
+sim_time: 2
+
+solver: CVODE
+solver_info:
+  MaximumStep: 0.0001
+  MaximumNumberOfSteps: 5000
+
+optimiser_options:
+  num_calls_to_function: 10000
+  cost_convergence: 0.001
+  max_patience: 10
+  cost_type: MSE
+
+resources_dir: /path/to/resources
+generated_models_dir: /path/to/generated_models
+param_id_output_dir: /path/to/param_id_output
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Observation Data" icon="chart-line" href="/param-id/observation-data">
+    Define experimental data and protocols
+  </Card>
+  <Card title="Optimizers" icon="chart-network" href="/param-id/optimizers">
+    Learn about optimization algorithms
+  </Card>
+</CardGroup>

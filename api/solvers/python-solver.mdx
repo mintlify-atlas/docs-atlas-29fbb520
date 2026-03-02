@@ -1,0 +1,311 @@
+---
+title: 'Python Solver Helper'
+description: 'SciPy-based solver for libCellML-generated Python model modules'
+---
+
+## PythonSolverHelper
+
+SciPy-based solver wrapper for running libCellML-generated Python models.
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:9`
+
+### Constructor
+
+```python
+SimulationHelper(model_path, dt, sim_time, solver_info=None, pre_time=0.0)
+```
+
+<ParamField path="model_path" type="str" required>
+  Path to the generated Python model file (`.py`)
+</ParamField>
+
+<ParamField path="dt" type="float" required>
+  Time step for output storage
+</ParamField>
+
+<ParamField path="sim_time" type="float" required>
+  Simulation duration (excluding pre-time)
+</ParamField>
+
+<ParamField path="solver_info" type="dict" default="None">
+  SciPy solve_ivp configuration. Supported keys:
+  - `method`: Integration method (e.g., 'RK45', 'RK23', 'LSODA', 'BDF', 'forward_euler')
+  - `rtol`: Relative tolerance
+  - `atol`: Absolute tolerance  
+  - `max_step`: Maximum step size
+  - `vectorized`: Whether RHS is vectorized
+  - `dense_output`: Whether to compute dense output
+  - `jac`: Jacobian function or matrix
+</ParamField>
+
+<ParamField path="pre_time" type="float" default="0.0">
+  Pre-simulation time for reaching steady state
+</ParamField>
+
+### Methods
+
+#### run
+
+```python
+run() -> bool
+```
+
+Executes the simulation using SciPy's `solve_ivp`.
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:201`
+
+<ResponseField name="return" type="bool">
+  True if integration succeeded, False otherwise
+</ResponseField>
+
+#### get_results
+
+```python
+get_results(variables_list_of_lists, flatten=False) -> List
+```
+
+Retrieves simulation results for specified variables.
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:268`
+
+<ParamField path="variables_list_of_lists" type="List[List[str]]" required>
+  Variable names to retrieve. Use `'time'` for time vector.
+</ParamField>
+
+<ParamField path="flatten" type="bool" default="False">
+  Whether to flatten result structure
+</ParamField>
+
+<ResponseField name="return" type="List">
+  Nested list of numpy arrays containing variable trajectories
+</ResponseField>
+
+#### get_all_results
+
+```python
+get_all_results(flatten=False) -> List
+```
+
+Retrieves results for all model variables (states and computed variables).
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:279`
+
+#### get_all_variable_names
+
+```python
+get_all_variable_names() -> List[str]
+```
+
+Returns names of all states and variables.
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:245`
+
+#### get_init_param_vals
+
+```python
+get_init_param_vals(param_names) -> List
+```
+
+Retrieves initial parameter values.
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:126`
+
+<ParamField path="param_names" type="List[Union[str, List[str]]]" required>
+  Parameter names to retrieve. Names can include `"/"` separators which are automatically resolved.
+</ParamField>
+
+<ResponseField name="return" type="List">
+  List of initial parameter values
+</ResponseField>
+
+#### set_param_vals
+
+```python
+set_param_vals(param_names, param_vals) -> None
+```
+
+Sets parameter values in states or variables arrays.
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:143`
+
+<ParamField path="param_names" type="List[Union[str, List[str]]]" required>
+  Parameter names to set
+</ParamField>
+
+<ParamField path="param_vals" type="List[float]" required>
+  Values to assign
+</ParamField>
+
+#### update_times
+
+```python
+update_times(dt, start_time, sim_time, pre_time) -> None
+```
+
+Updates simulation timing parameters and regenerates time evaluation array.
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:113`
+
+<ParamField path="dt" type="float" required>
+  New time step
+</ParamField>
+
+<ParamField path="start_time" type="float" required>
+  Simulation start time
+</ParamField>
+
+<ParamField path="sim_time" type="float" required>
+  Simulation duration
+</ParamField>
+
+<ParamField path="pre_time" type="float" required>
+  Pre-simulation duration
+</ParamField>
+
+#### reset_and_clear
+
+```python
+reset_and_clear(only_one_exp=-1) -> None
+```
+
+Resets states, rates, and variables to initial values.
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:283`
+
+#### reset_states
+
+```python
+reset_states() -> None
+```
+
+Resets only state variables to defaults.
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:286`
+
+#### close_simulation
+
+```python
+close_simulation() -> None
+```
+
+No-op for SciPy solver (no resources to clean up).
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:290`
+
+#### get_time
+
+```python
+get_time(include_pre_time=False) -> np.ndarray
+```
+
+Returns the time vector for stored results.
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:39`
+
+<ParamField path="include_pre_time" type="bool" default="False">
+  Whether to include pre-time in returned array
+</ParamField>
+
+#### set_solve_ivp_method
+
+```python
+set_solve_ivp_method(method) -> None
+```
+
+Changes the integration method.
+
+Location: `~/workspace/source/src/solver_wrappers/python_solver_helper.py:45`
+
+<ParamField path="method" type="str" required>
+  New integration method ('RK45', 'RK23', 'LSODA', 'BDF', 'forward_euler', etc.)
+</ParamField>
+
+### Attributes
+
+<ResponseField name="model_path" type="str">
+  Path to Python model file
+</ResponseField>
+
+<ResponseField name="model" type="module">
+  Loaded Python model module
+</ResponseField>
+
+<ResponseField name="STATE_COUNT" type="int">
+  Number of state variables
+</ResponseField>
+
+<ResponseField name="STATE_INFO" type="List[dict]">
+  State variable metadata (name, units, component)
+</ResponseField>
+
+<ResponseField name="VARIABLE_INFO" type="List[dict]">
+  All variable metadata
+</ResponseField>
+
+<ResponseField name="states" type="np.ndarray">
+  Current state values
+</ResponseField>
+
+<ResponseField name="variables" type="np.ndarray">
+  Current variable values
+</ResponseField>
+
+<ResponseField name="state_traj" type="np.ndarray">
+  State trajectories from last simulation (shape: [n_states, n_timesteps])
+</ResponseField>
+
+<ResponseField name="var_traj" type="dict">
+  Variable trajectories from last simulation (keyed by variable name)
+</ResponseField>
+
+<ResponseField name="tSim" type="np.ndarray">
+  Time vector for stored results (excludes pre-time)
+</ResponseField>
+
+### Example
+
+```python
+from solver_wrappers.python_solver_helper import SimulationHelper
+
+# Configure SciPy solver
+solver_info = {
+    'method': 'LSODA',
+    'rtol': 1e-7,
+    'atol': 1e-9,
+    'max_step': 0.001
+}
+
+# Create simulation helper
+sim = SimulationHelper(
+    model_path='generated_model.py',
+    dt=0.01,
+    sim_time=10.0,
+    solver_info=solver_info,
+    pre_time=5.0
+)
+
+# Set parameters
+sim.set_param_vals(['R_sys'], [1.2])
+
+# Run simulation
+if sim.run():
+    # Get results
+    results = sim.get_results([['time', 'P_lv', 'V_lv']])
+    time = results[0][0]
+    pressure = results[0][1]
+    volume = results[0][2]
+
+sim.close_simulation()
+```
+
+### Supported Integration Methods
+
+The following methods are available via `solver_info['method']`:
+
+- **RK45**: Explicit Runge-Kutta 4(5) (default, adaptive)
+- **RK23**: Explicit Runge-Kutta 2(3) (adaptive)
+- **DOP853**: Explicit Runge-Kutta 8(5,3) (adaptive)
+- **Radau**: Implicit Runge-Kutta (stiff problems)
+- **BDF**: Backward differentiation formula (stiff problems)
+- **LSODA**: Automatic stiffness detection and switching
+- **forward_euler**: Simple forward Euler (educational, not recommended for production)

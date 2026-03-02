@@ -1,0 +1,139 @@
+---
+title: "Observation Data Helpers"
+description: "Utilities for creating and managing observation data structures"
+---
+
+The `ObsDataCreator` class provides a structured way to create observation data dictionaries for model validation and parameter identification.
+
+## Class: ObsDataCreator
+
+Creates and manages observation data dictionaries containing protocol information, prediction items, and data items.
+
+### Constructor
+
+```python
+ObsDataCreator()
+```
+
+Initializes a new observation data creator with empty protocol info, prediction items, and data items.
+
+## Methods
+
+### add_protocol_info
+
+```python
+add_protocol_info(pre_times, sim_times, params_to_change, experiment_labels=None)
+```
+
+Add protocol information describing experimental conditions.
+
+<ParamField path="pre_times" type="list" required>
+  List of pre-simulation times for each experiment
+</ParamField>
+
+<ParamField path="sim_times" type="list[list]" required>
+  2D list of simulation times for each experiment and subexperiment
+</ParamField>
+
+<ParamField path="params_to_change" type="dict" required>
+  Dictionary with parameter names as keys and 2D lists of values as values. Each parameter should have values with the same shape as sim_times
+</ParamField>
+
+<ParamField path="experiment_labels" type="list" default="None">
+  List of labels for each experiment. If None, defaults to 'exp_0', 'exp_1', etc.
+</ParamField>
+
+**Raises:** `ValueError` if inputs have incompatible shapes or invalid types
+
+### add_prediction_item
+
+```python
+add_prediction_item(variable, unit, experiment_idx)
+```
+
+Add a prediction item specifying what variable to predict for an experiment.
+
+<ParamField path="variable" type="str" required>
+  Name of the variable to predict
+</ParamField>
+
+<ParamField path="unit" type="str" required>
+  Unit of the variable
+</ParamField>
+
+<ParamField path="experiment_idx" type="int" required>
+  Index of the experiment this prediction belongs to
+</ParamField>
+
+**Raises:** `ValueError` if experiment_idx is out of bounds
+
+### add_data_item
+
+```python
+add_data_item(entry)
+```
+
+Add a data item to the observation data dictionary.
+
+<ParamField path="entry" type="dict" required>
+  Dictionary containing the data item with the following keys:
+  - `variable` (str, required): Variable name
+  - `operands` (list, required): List of operand variables
+  - `unit` (str, required): Unit of measurement
+  - `value` (float or list, required): Observed value(s)
+  - `std` (float or list, required): Standard deviation(s)
+  - `name_for_plotting` (str, optional): Display name (defaults to variable)
+  - `operation` (str, optional): Operation to apply (defaults to None)
+  - `weight` (float, optional): Weight for this data item (defaults to 1.0)
+  - `experiment_idx` (int, optional): Experiment index (defaults to 0)
+  - `subexperiment_idx` (int, optional): Subexperiment index (defaults to 0)
+  - `data_type` (str, optional): 'series' or 'constant' (auto-detected from value)
+  - `obs_dt` (float, required for series): Time step for series data
+</ParamField>
+
+**Raises:** `ValueError` if required keys are missing or indices are out of bounds
+
+**Notes:**
+- Automatically converts numpy arrays to lists
+- For series data (when value is a list/array), obs_dt is required
+- Multiple underscores in name_for_plotting are escaped for LaTeX
+
+### get_obs_data_dict
+
+```python
+get_obs_data_dict()
+```
+
+Returns the complete observation data dictionary.
+
+**Returns:** `dict` - The observation data dictionary containing protocol_info, prediction_items, and data_items
+
+### dump_to_path
+
+```python
+dump_to_path(output_path)
+```
+
+Saves the observation data dictionary to a JSON file.
+
+<ParamField path="output_path" type="str" required>
+  Path where the JSON file should be saved
+</ParamField>
+
+**Notes:**
+- Empty prediction_items are removed before saving
+- Output is formatted with 2-space indentation
+
+### load_from_json_file
+
+```python
+load_from_json_file(input_path)
+```
+
+Loads observation data from a JSON file.
+
+<ParamField path="input_path" type="str" required>
+  Path to the JSON file to load
+</ParamField>
+
+**Returns:** `dict` - The loaded observation data dictionary

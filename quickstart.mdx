@@ -1,80 +1,163 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Generate and simulate your first circulatory model in minutes
 ---
 
-## Get started in three steps
+Get up and running with Circulatory Autogen by generating and simulating a simple 3-compartment cardiovascular model.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before starting, ensure you have completed the [installation](/installation) steps.
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Quick walkthrough
 
-### Step 2: Deploy your changes
+<Steps>
+  <Step title="Navigate to the project directory">
+    ```bash
+    cd /path/to/circulatory_autogen
+    ```
+  </Step>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+  <Step title="Configure user inputs">
+    The example 3-compartment model is pre-configured. Open `user_run_files/user_inputs.yaml` and verify:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```yaml
+    file_prefix: 3compartment
+    input_param_file: 3compartment_parameters.csv
+    model_type: cellml_only
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    The `resources/` directory already contains:
+    - `3compartment_vessel_array.csv` - Model structure definition
+    - `3compartment_parameters.csv` - Model parameters
+  </Step>
 
-### Step 3: Go live
+  <Step title="Run autogeneration">
+    From the project root:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```bash
+    cd user_run_files
+    ./run_autogeneration.sh
+    ```
+
+    This generates CellML files in `generated_models/3compartment/`:
+    - `3compartment.cellml` - Main model file
+    - `3compartment_units.cellml` - Units definitions
+    - `3compartment_parameters.cellml` - Parameter values
+    - `3compartment_modules.cellml` - Component modules
+    - `3compartment_parameters.csv` - Parameter table
+  </Step>
+
+  <Step title="Open in OpenCOR">
+    Launch OpenCOR and open the generated model:
+
+    ```
+    File > Open > generated_models/3compartment/3compartment.cellml
+    ```
+  </Step>
+
+  <Step title="Configure simulation">
+    In OpenCOR's Simulation panel:
+    - **Starting point:** 0 seconds
+    - **Ending point:** 2 seconds  
+    - **Point interval:** 0.01 seconds
+    - **Solver:** CVODE (default)
+  </Step>
+
+  <Step title="Run simulation">
+    Click **Run** to simulate the model. The simulation runs for 2 seconds of cardiac cycles.
+  </Step>
+
+  <Step title="Plot results">
+    In the OpenCOR plot panel, add these variables to visualize:
+    - `aortic_root.v` - Aortic flow rate
+    - `pvn.v` - Pulmonary vein flow rate  
+    - `heart.Vol` - Heart volume
+
+    You should see periodic cardiac waveforms.
+  </Step>
+</Steps>
+
+## Understanding the 3-compartment model
+
+This simple model represents the cardiovascular system with three main regions:
+
+- **Heart** - Pumps blood with periodic contraction
+- **Systemic circulation** - Arteries (`aortic_root`, `svc`, `ivc`) and systemic terminal resistance (`terminal_sys`)
+- **Pulmonary circulation** - Pulmonary artery (`pa`), pulmonary vein (`pvn`), and pulmonary terminal resistance (`terminal_pul`)
+
+The vessel array defines how these components connect:
+
+```csv
+name,BC_type,vessel_type,inp_vessels,out_vessels
+heart,nn,heart_mn,"ivc svc pvn","aortic_root pa"
+aortic_root,vp,arterial_simple,heart,svc
+svc,vp,venous_simple,aortic_root,heart
+ivc,vp,venous_simple,terminal_sys,heart
+pa,vp,arterial_simple,heart,terminal_pul
+pvn,vp,venous_simple,terminal_pul,heart
+terminal_sys,pp,terminal,aortic_root,ivc
+terminal_pul,pp,terminal,pa,pvn
+```
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Design Your Own Model" icon="pen-ruler" href="/tutorials/basic-model">
+    Learn to create custom vessel networks
+  </Card>
+  
+  <Card title="Parameter Identification" icon="bullseye" href="/param-id/overview">
+    Calibrate models to clinical data
+  </Card>
+  
+  <Card title="3-Compartment Tutorial" icon="graduation-cap" href="/tutorials/3compartment-example">
+    Deep dive into the example model
+  </Card>
+  
+  <Card title="Sensitivity Analysis" icon="chart-line" href="/analysis/sensitivity-analysis">
+    Identify influential parameters
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Alternative workflows
+
+### Run from Python script
+
+Instead of the bash script, use Python directly:
+
+```bash
+cd src/scripts
+python script_generate_with_new_architecture.py
+```
+
+### Use Jupyter notebooks
+
+Interactive tutorials are available:
+
+```bash
+cd tutorial/interactive
+jupyter notebook generation_and_calibration.ipynb
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Missing OpenCOR Python shell">
+    Ensure `user_run_files/opencor_pythonshell_path.sh` points to your OpenCOR installation:
+
+    ```bash
+    OPENCOR_PYTHON=/path/to/OpenCOR/bin/python
+    ```
+  </Accordion>
+
+  <Accordion title="Module generation errors">
+    Check that all module types in `vessel_array.csv` exist in:
+    - `src/generators/resources/*_modules_config.json`
+    - `module_config_user/*_modules_config.json`
+  </Accordion>
+
+  <Accordion title="Simulation fails in OpenCOR">
+    Verify parameters file has no missing values. Run autogeneration again to populate missing parameters with defaults.
+  </Accordion>
+</AccordionGroup>

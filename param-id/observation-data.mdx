@@ -1,0 +1,800 @@
+---
+title: Observation Data Format
+description: Define experimental protocols, observables, time series data, and cost functions in obs_data.json
+---
+
+The `obs_data.json` file defines the experimental data and protocols used for parameter identification. It specifies what to measure from your model and how to compare it to ground truth.
+
+## File Location
+
+Specify the path in `user_inputs.yaml`:
+
+```yaml
+param_id_obs_path: /path/to/obs_data.json
+```
+
+Path can be absolute or relative to your `user_inputs.yaml` file.
+
+Recommended location:
+```
+resources/[file_prefix]_obs_data.json
+```
+
+## File Structure
+
+The JSON file has three main sections:
+
+```json
+{
+  "protocol_info": { ... },      // Optional: experimental protocols
+  "data_items": [ ... ],         // Required: observables for calibration
+  "prediction_items": [ ... ]    // Optional: additional outputs to plot
+}
+```
+
+## Helper Tools
+
+<Warning>
+**Do not edit JSON by hand!** Use the helper class to generate correctly formatted files.
+</Warning>
+
+```python
+from src.utilities.obs_data_helpers import ObsDataHelper
+
+# See example:
+src/scripts/example_format_obs_data_json_file.py
+```
+
+This prevents formatting errors and validates your data structure.
+
+## Protocol Info
+
+`protocol_info` defines simulation experiments with different parameter values or time periods.
+
+### When to Use
+
+- **Multiple experimental conditions** (e.g., drug concentrations, stimulation frequencies)
+- **Time-varying inputs** (e.g., step changes in current)
+- **Multiple protocols** to calibrate simultaneously
+
+### Structure
+
+```json
+"protocol_info": {
+  "pre_times": [1.0, 1.0],
+  "sim_times": [[1, 2], [1, 2]],
+  "params_to_change": {
+    "soma_SN/I_in": [[0, -0.15], [0, -0.15]],
+    "soma_SN/g_M": [[0.08, 0.08], [0.12, 0.12]]
+  },
+  "experiment_colors": ["r", "b"],
+  "experiment_labels": ["Control", "Drug Treatment"]
+}
+```
+
+### Fields
+
+<ParamField path="pre_times" type="array of floats">
+  Time (seconds) to simulate before comparing to observables, for each experiment. Used to reach steady state.
+  
+  **Shape:** `(num_experiments,)`
+  
+  **Example:** `[1.0, 1.0]` - both experiments pre-simulate for 1 second
+  
+  <Note>
+  Overrides the `pre_time` setting in `user_inputs.yaml`.
+  </Note>
+</ParamField>
+
+<ParamField path="sim_times" type="array of arrays">
+  Duration (seconds) of each subexperiment within each experiment.
+  
+  **Shape:** `(num_experiments, num_subexperiments)`
+  
+  **Example:** `[[1, 2], [1, 2]]`
+  - Experiment 0: two subexperiments of 1s and 2s
+  - Experiment 1: two subexperiments of 1s and 2s
+  
+  **Note:** Different experiments can have different numbers of subexperiments.
+</ParamField>
+
+<ParamField path="params_to_change" type="object">
+  Dictionary mapping parameter names to their values at each `(experiment_idx, subexperiment_idx)`.
+  
+  **Structure:**
+  ```json
+  {
+    "module/param_name": [
+      [subexp0_exp0, subexp1_exp0, ...],  // Experiment 0
+      [subexp0_exp1, subexp1_exp1, ...]   // Experiment 1
+    ]
+  }
+  ```
+  
+  **Example:**
+  ```json
+  "soma_SN/I_in": [
+    [0, -0.15],      // Exp 0: I_in=0 then -0.15
+    [0, -0.15]       // Exp 1: I_in=0 then -0.15
+  ],
+  "soma_SN/g_M": [
+    [0.08, 0.08],    // Exp 0: g_M=0.08 throughout
+    [0.12, 0.12]     // Exp 1: g_M=0.12 throughout
+  ]
+  ```
+</ParamField>
+
+<ParamField path="experiment_colors" type="array of strings">
+  Matplotlib color codes for plotting each experiment.
+  
+  **Example:** `["r", "b", "g"]` - red, blue, green
+</ParamField>
+
+<ParamField path="experiment_labels" type="array of strings">
+  Labels for each experiment used in plots and filenames.
+  
+  **Example:** `["Baseline", "Post-drug"]`
+</ParamField>
+
+### Example: Sympathetic Neuron
+
+Two experiments with changing input current and M-channel conductance:
+
+```json
+{
+  "protocol_info": {
+    "pre_times": [1.0, 1.0],
+    "sim_times": [[1, 2], [1, 2]],
+    "params_to_change": {
+      "soma_SN/I_in": [[0, -0.15], [0, -0.15]],
+      "soma_SN/g_M": [[0.08, 0.08], [0.12, 0.12]]
+    },
+    "experiment_colors": ["r", "b"],
+    "experiment_labels": ["Low g_M", "High g_M"]
+  }
+}
+```
+
+**Interpretation:**
+- Two experiments (different g_M values)
+- Each experiment has two subexperiments:
+  1. 1 second with I_in = 0 (baseline)
+  2. 2 seconds with I_in = -0.15 (stimulation)
+
+### Simple Case: No Protocol
+
+If all observables come from a single simulation, omit `protocol_info`:
+
+```json
+{
+  "data_items": [ ... ]
+}
+```
+
+Use `pre_time` and `sim_time` from `user_inputs.yaml` instead.
+
+## Data Items
+
+`data_items` defines the observables used in the cost function for optimization.
+
+### Required Fields
+
+Every data item must have:
+
+<ParamField path="variable" type="string" required>
+  Name of the observable (user-defined, doesn't need to match CellML variable).
+  
+  **Example:** `"stroke volume"`, `"pressure aortic root"`
+</ParamField>
+
+<ParamField path="data_type" type="string" required>
+  Type of observable:
+  - `constant`: Scalar value (e.g., mean, max, min)
+  - `series`: Time series data
+  - `frequency`: Frequency domain data (amplitude and phase)
+  - `prob_dist`: Probability distribution (experimental)
+</ParamField>
+
+<ParamField path="unit" type="string" required>
+  Physical unit of the observable.
+  
+  **Common units:**
+  - `m3_per_s`: Flow rate
+  - `J_per_m3`: Pressure
+  - `m3`: Volume
+  - `s`: Time
+  - `per_s`: Frequency
+  - `milliV`: Voltage
+  - `millimolar`: Concentration
+</ParamField>
+
+<ParamField path="weight" type="float" required>
+  Weighting factor for this observable in the cost function.
+  
+  **Default:** 1.0
+  
+  **Higher weight:** More emphasis on fitting this observable
+  
+  **Zero weight:** Observable not used in optimization (plot only)
+</ParamField>
+
+<ParamField path="value" type="float or array" required>
+  Ground truth value(s) to match.
+  
+  - **constant**: single number
+  - **series**: array of values
+  - **frequency**: array of amplitudes
+</ParamField>
+
+<ParamField path="std" type="float or array" required>
+  Standard deviation for cost normalization (measurement uncertainty).
+  
+  **Role:** Normalizes errors so observables with different scales contribute equally.
+  
+  **Rule of thumb:** Set to ~10% of `value` if unknown.
+</ParamField>
+
+### Constant Data Type
+
+Scalar observables computed from time series (e.g., mean, max, min).
+
+#### Example: Mean Flow
+
+```json
+{
+  "variable": "flow aortic root",
+  "name_for_plotting": "v_{AR}",
+  "data_type": "constant",
+  "operation": "mean",
+  "operands": ["aortic_root/v"],
+  "unit": "m3_per_s",
+  "weight": 1.0,
+  "value": 1e-4,
+  "std": 1e-5,
+  "cost_type": "gaussian_MLE",
+  "plot_type": "horizontal"
+}
+```
+
+#### Additional Fields for Constants
+
+<ParamField path="operation" type="string" required>
+  Operation to apply to model output.
+  
+  **Built-in operations** (see `src/param_id/operation_funcs.py`):
+  - `mean`: Average value over time
+  - `max`: Maximum value
+  - `min`: Minimum value
+  - `max_minus_min`: Range (e.g., stroke volume)
+  - `first_peak_time`: Time of first peak
+  - `calc_spike_frequency_windowed`: Spike frequency
+  
+  **Custom operations:** Define in `funcs_user/operation_funcs_user.py`
+</ParamField>
+
+<ParamField path="operands" type="array of strings" required>
+  Model variables to use as inputs to the operation.
+  
+  **Example:** `["aortic_root/v"]` - flow variable
+  
+  **Multiple operands:** `["time", "soma_SN/V"]` - time and voltage
+</ParamField>
+
+<ParamField path="plot_type" type="string">
+  How to plot this constant observable:
+  - `horizontal`: Horizontal line at value
+  - `vertical`: Vertical line at time value
+  - `horizontal_from_min`: Horizontal line offset from minimum
+  - `vertical_from_subexp_start`: Vertical line relative to subexperiment start
+  - `None`: Don't plot
+</ParamField>
+
+<ParamField path="cost_type" type="string">
+  Cost function for this observable:
+  - `gaussian_MLE`: Gaussian maximum likelihood (default)
+  - User-defined in `funcs_user/cost_funcs_user.py`
+</ParamField>
+
+<ParamField path="experiment_idx" type="integer">
+  Which experiment this observable belongs to (0-indexed).
+  
+  **Optional:** Defaults to 0 if not specified.
+</ParamField>
+
+<ParamField path="subexperiment_idx" type="integer">
+  Which subexperiment within the experiment (0-indexed).
+  
+  **Optional:** Defaults to 0 if not specified.
+</ParamField>
+
+#### Example: Multiple Operations on Same Variable
+
+```json
+[
+  {
+    "variable": "pressure aortic root",
+    "operation": "mean",
+    "operands": ["aortic_root/u"],
+    "value": 12000,
+    "std": 1200,
+    "weight": 1.0
+  },
+  {
+    "variable": "pressure aortic root",
+    "operation": "max",
+    "operands": ["aortic_root/u"],
+    "value": 16000,
+    "std": 1600,
+    "weight": 5.0
+  },
+  {
+    "variable": "pressure aortic root",
+    "operation": "min",
+    "operands": ["aortic_root/u"],
+    "value": 10500,
+    "std": 1050,
+    "weight": 5.0
+  }
+]
+```
+
+### Series Data Type
+
+Time series observables (full waveforms).
+
+#### Example: Pressure Waveform
+
+```json
+{
+  "variable": "aortic_root/u",
+  "name_for_plotting": "P_{ao}",
+  "data_type": "series",
+  "unit": "J_per_m3",
+  "weight": 1.0,
+  "value": [12000, 12500, 15000, 16000, ..., 10500],
+  "std": 1200,
+  "obs_dt": 0.01,
+  "experiment_idx": 0,
+  "subexperiment_idx": 0
+}
+```
+
+#### Additional Fields for Series
+
+<ParamField path="obs_dt" type="float" required>
+  Time step (seconds) between consecutive values in the series.
+  
+  **Example:** `0.01` for 100 Hz sampling
+  
+  <Warning>
+  `obs_dt` is **required** for series data. Old fields `dt` and `sample_rate` are deprecated.
+  </Warning>
+</ParamField>
+
+<ParamField path="value" type="array of floats" required>
+  Time series values.
+  
+  **Length:** Determines duration = `len(value) × obs_dt`
+</ParamField>
+
+<ParamField path="std" type="float or array">
+  Measurement uncertainty.
+  - **Float**: Same std for all time points
+  - **Array**: Time-varying std (same length as `value`)
+</ParamField>
+
+#### Series Cost Function
+
+```python
+cost = Σ |model[i] - obs[i]| / std[i]
+```
+
+or for MSE:
+
+```python
+cost = Σ (model[i] - obs[i])² / std[i]²
+```
+
+Summed over all time points in the series.
+
+### Frequency Data Type
+
+Frequency domain observables (from FFT).
+
+#### Example: Impedance Spectrum
+
+```json
+{
+  "variable": "impedance",
+  "name_for_plotting": "Z",
+  "data_type": "frequency",
+  "unit": "Pa_s_per_m3",
+  "weight": 1.0,
+  "freqs": [1.0, 2.0, 3.0, 4.0, 5.0],
+  "value": [1.2e6, 8.5e5, 6.2e5, 5.1e5, 4.5e5],
+  "std": [1.2e5, 8.5e4, 6.2e4, 5.1e4, 4.5e4],
+  "phase": [0.1, 0.2, 0.15, 0.12, 0.1],
+  "std_phase": [0.05, 0.05, 0.05, 0.05, 0.05],
+  "weight_phase": 0.5
+}
+```
+
+#### Additional Fields for Frequency
+
+<ParamField path="freqs" type="array of floats" required>
+  Frequency values (Hz) at which amplitude/phase are measured.
+</ParamField>
+
+<ParamField path="value" type="array of floats" required>
+  Amplitude values at each frequency.
+  
+  **Length:** Must match `freqs`
+</ParamField>
+
+<ParamField path="phase" type="array of floats">
+  Phase values (radians) at each frequency.
+  
+  **Optional:** Omit if only fitting amplitude
+</ParamField>
+
+<ParamField path="std_phase" type="array of floats">
+  Standard deviation for phase measurements.
+</ParamField>
+
+<ParamField path="weight_phase" type="float">
+  Separate weight for phase cost (in addition to `weight` for amplitude).
+</ParamField>
+
+#### Frequency Cost Function
+
+```python
+# Amplitude cost
+cost_amp = Σ |model_amp[i] - obs_amp[i]| × weight / std[i]
+
+# Phase cost (if provided)
+cost_phase = Σ |model_phase[i] - obs_phase[i]| × weight_phase / std_phase[i]
+
+total_cost = cost_amp + cost_phase
+```
+
+### Probability Distribution Data Type
+
+<Warning>
+Probability distribution observables (`prob_dist`) are experimental and not fully documented.
+</Warning>
+
+## Prediction Items
+
+`prediction_items` defines additional model outputs to plot (not used in cost function).
+
+### When to Use
+
+- Visualize unmeasured variables
+- Check model behavior
+- Validate predictions
+
+### Structure
+
+```json
+"prediction_items": [
+  {
+    "variable": "common_carotid_R6_A/u",
+    "unit": "J_per_m3",
+    "name_for_plotting": "p_{CC}",
+    "experiment_idx": 0
+  },
+  {
+    "variable": "soma_SN/V",
+    "unit": "milliV",
+    "name_for_plotting": "V",
+    "experiment_idx": 1
+  }
+]
+```
+
+### Fields
+
+<ParamField path="variable" type="string" required>
+  Full CellML variable name (e.g., `module/variable_name`).
+</ParamField>
+
+<ParamField path="unit" type="string" required>
+  Physical unit for axis labels.
+</ParamField>
+
+<ParamField path="name_for_plotting" type="string">
+  LaTeX-formatted name for plots.
+  
+  **Optional:** Defaults to `variable` if not provided.
+</ParamField>
+
+<ParamField path="experiment_idx" type="integer">
+  Which experiment to plot (0-indexed).
+  
+  **Optional:** Defaults to 0.
+</ParamField>
+
+## Custom Operations
+
+Define custom operations in `funcs_user/operation_funcs_user.py` for extracting features from model outputs.
+
+### Example: E/A Ratio
+
+```python
+def calc_E_A_ratio(time, v, series_output=False, **kwargs):
+    """
+    Calculate ratio of first two peaks (E/A ratio for mitral valve flow).
+    
+    Args:
+        time: Time vector
+        v: Flow variable
+        series_output: If True, return full series for plotting
+        **kwargs: Additional keyword arguments from operation_kwargs
+    
+    Returns:
+        E_A_ratio: Scalar ratio, or full series if series_output=True
+    """
+    from scipy.signal import find_peaks
+    
+    peaks, _ = find_peaks(v, height=kwargs.get('min_height', 0))
+    
+    if len(peaks) < 2:
+        # Not enough peaks found - return high cost
+        if series_output:
+            return v  # Return original for plotting
+        return 1e10  # Penalty value
+    
+    E_peak = v[peaks[0]]
+    A_peak = v[peaks[1]]
+    
+    if series_output:
+        return v  # Return series for plotting
+    
+    return E_peak / A_peak
+```
+
+### Using Custom Operations
+
+```json
+{
+  "variable": "mitral_valve_flow",
+  "operation": "calc_E_A_ratio",
+  "operands": ["time", "mitral/v"],
+  "operation_kwargs": {
+    "min_height": 1e-5
+  },
+  "value": 1.8,
+  "std": 0.2
+}
+```
+
+<ParamField path="operation_kwargs" type="object">
+  Dictionary of keyword arguments passed to the operation function.
+  
+  **Example:**
+  ```json
+  "operation_kwargs": {
+    "window_start": 0.5,
+    "window_end": 2.0,
+    "threshold": 0.1
+  }
+  ```
+</ParamField>
+
+### Operation Function Requirements
+
+1. **Accept `series_output` parameter** for plotting
+2. **Return high value** (e.g., 1e10) if operation fails
+3. **Use `**kwargs`** for flexibility
+4. **Handle edge cases** gracefully
+
+## Custom Cost Functions
+
+Define custom cost/likelihood functions in `funcs_user/cost_funcs_user.py`.
+
+### Example: Gaussian MLE
+
+```python
+def gaussian_MLE_cost(obs_values, model_values, std_values, weight=1.0):
+    """
+    Maximum likelihood estimator for Gaussian noise.
+    Equivalent to weighted mean squared error.
+    
+    Args:
+        obs_values: Ground truth observations (array)
+        model_values: Model predictions (array)
+        std_values: Measurement standard deviations (array)
+        weight: Weighting factor
+    
+    Returns:
+        cost: Negative log-likelihood
+    """
+    residuals = (obs_values - model_values) / std_values
+    mse = np.mean(residuals**2)
+    return weight * mse
+```
+
+### Using Custom Cost Functions
+
+```json
+{
+  "variable": "my_observable",
+  "value": 100.0,
+  "std": 10.0,
+  "cost_type": "my_custom_cost",
+  "weight": 2.0
+}
+```
+
+The function `my_custom_cost` must be defined in `funcs_user/cost_funcs_user.py`.
+
+<Note>
+Kwargs for cost functions are planned but not yet implemented. See [GitHub issue #84](https://github.com/FinbarArgus/circulatory_autogen/issues/84).
+</Note>
+
+## Complete Example
+
+### Simple: Single Experiment
+
+```json
+{
+  "data_items": [
+    {
+      "variable": "flow aortic root",
+      "name_for_plotting": "v_{AR}",
+      "data_type": "constant",
+      "operation": "mean",
+      "operands": ["aortic_root/v"],
+      "unit": "m3_per_s",
+      "weight": 1.0,
+      "value": 1e-4,
+      "std": 1e-5,
+      "plot_type": "horizontal"
+    },
+    {
+      "variable": "stroke volume",
+      "name_for_plotting": "SV",
+      "data_type": "constant",
+      "operation": "max_minus_min",
+      "operands": ["heart/q_lv"],
+      "unit": "m3",
+      "weight": 2.0,
+      "value": 1.04e-4,
+      "std": 5e-5,
+      "plot_type": "horizontal_from_min"
+    },
+    {
+      "variable": "pressure aortic root",
+      "name_for_plotting": "P_{ao}",
+      "data_type": "constant",
+      "operation": "max",
+      "operands": ["aortic_root/u"],
+      "unit": "J_per_m3",
+      "weight": 5.0,
+      "value": 16000,
+      "std": 1600,
+      "plot_type": "horizontal"
+    }
+  ]
+}
+```
+
+### Complex: Multiple Experiments
+
+```json
+{
+  "protocol_info": {
+    "pre_times": [1.0, 1.0],
+    "sim_times": [[1, 2], [1, 2]],
+    "params_to_change": {
+      "soma_SN/I_in": [[0, -0.15], [0, -0.15]],
+      "soma_SN/g_M": [[0.08, 0.08], [0.12, 0.12]]
+    },
+    "experiment_colors": ["r", "b"],
+    "experiment_labels": ["Low g_M", "High g_M"]
+  },
+  "prediction_items": [
+    {
+      "variable": "soma_SN/V",
+      "unit": "milliV",
+      "name_for_plotting": "V",
+      "experiment_idx": 0
+    },
+    {
+      "variable": "soma_SN/V",
+      "unit": "milliV",
+      "name_for_plotting": "V",
+      "experiment_idx": 1
+    }
+  ],
+  "data_items": [
+    {
+      "variable": "soma_SN/V",
+      "name_for_plotting": "f_{spike}",
+      "data_type": "constant",
+      "operation": "calc_spike_frequency_windowed",
+      "operands": ["time", "soma_SN/V"],
+      "unit": "per_s",
+      "weight": 1.0,
+      "value": 4.0,
+      "std": 0.4,
+      "experiment_idx": 0,
+      "subexperiment_idx": 1,
+      "plot_type": "None"
+    },
+    {
+      "variable": "soma_SN/V",
+      "name_for_plotting": "f_{spike}",
+      "data_type": "constant",
+      "operation": "calc_spike_frequency_windowed",
+      "operands": ["time", "soma_SN/V"],
+      "unit": "per_s",
+      "weight": 1.0,
+      "value": 0.5,
+      "std": 0.05,
+      "experiment_idx": 1,
+      "subexperiment_idx": 1,
+      "plot_type": "None"
+    },
+    {
+      "variable": "soma_SN/V",
+      "name_for_plotting": "t_{peak}",
+      "data_type": "constant",
+      "operation": "first_peak_time",
+      "operands": ["time", "soma_SN/V"],
+      "unit": "s",
+      "weight": 1.0,
+      "value": 2.02,
+      "std": 0.1,
+      "experiment_idx": 0,
+      "subexperiment_idx": 1,
+      "plot_type": "vertical"
+    }
+  ]
+}
+```
+
+## Deprecated Fields
+
+<Warning>
+The following fields are deprecated and should not be used:
+</Warning>
+
+- **`obs_type`**: Use `operation` instead
+- **`dt`** (in series): Use `obs_dt` instead
+- **`sample_rate`** (in series): Use `obs_dt` instead
+- **`state_or_alg`**: No longer needed
+
+## Best Practices
+
+### Observable Selection
+
+1. **Include diverse observables** - different aspects of model behavior
+2. **Match experimental precision** - set `std` realistically
+3. **Weight by reliability** - higher weight for more reliable measurements
+4. **Avoid redundancy** - don't use highly correlated observables
+
+### Data Quality
+
+1. **Time alignment** - ensure series data is properly aligned
+2. **Steady state** - use adequate `pre_time` for convergence
+3. **Sampling rate** - `obs_dt` should match experimental acquisition
+4. **Noise estimation** - realistic `std` improves convergence
+
+### Protocol Design
+
+1. **Informative protocols** - choose conditions that constrain parameters
+2. **Independent experiments** - vary different aspects of the model
+3. **Sufficient duration** - `sim_times` long enough to capture dynamics
+4. **Realistic perturbations** - parameter changes within physiological range
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/param-id/configuration">
+    Set up params_for_id.csv and simulation settings
+  </Card>
+  <Card title="Optimizers" icon="chart-network" href="/param-id/optimizers">
+    Choose and configure optimization algorithm
+  </Card>
+</CardGroup>

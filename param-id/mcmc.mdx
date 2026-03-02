@@ -1,0 +1,551 @@
+---
+title: MCMC Uncertainty Quantification
+description: Use Markov Chain Monte Carlo with emcee to quantify parameter uncertainty and explore posterior distributions
+---
+
+After finding optimal parameters with an optimizer, use Markov Chain Monte Carlo (MCMC) to quantify uncertainty and explore the full posterior distribution of parameters.
+
+## What is MCMC?
+
+MCMC samples from the posterior distribution of parameters given the data:
+
+```
+P(parameters | data) ∝ P(data | parameters) × P(parameters)
+```
+
+- **Likelihood**: `P(data | parameters)` - how well parameters explain data
+- **Prior**: `P(parameters)` - parameter bounds from `params_for_id.csv`
+- **Posterior**: `P(parameters | data)` - probability distribution of parameters
+
+MCMC explores this distribution using random walks (chains) that preferentially visit high-probability regions.
+
+## When to Use MCMC
+
+Use MCMC after parameter identification to:
+
+- **Quantify uncertainty** in parameter estimates
+- **Identify correlations** between parameters
+- **Assess identifiability** - are parameters well-constrained?
+- **Validate optimization** - check if optimizer found global minimum
+- **Report confidence intervals** for publication
+
+<Note>
+MCMC is computationally expensive. Run it after optimization has found good initial parameters.
+</Note>
+
+## Implementation
+
+Circulatory Autogen uses the **emcee** library for MCMC sampling:
+
+- **Library**: `emcee` (affine-invariant ensemble sampler)
+- **Alternative**: `zeus` (commented out in code)
+- **Reference**: `src/param_id/paramID.py:OpencorMCMC`
+
+### Installation
+
+```bash
+pip install emcee corner
+```
+
+- `emcee`: MCMC sampler
+- `corner`: Corner plots for visualizing posteriors
+
+## Configuration
+
+### Enable MCMC in user_inputs.yaml
+
+```yaml
+do_mcmc: true
+
+mcmc_options:
+  num_steps: 1000      # Number of MCMC steps per walker
+  num_walkers: 64      # Number of parallel chains
+  cost_type: MSE       # Cost function type
+  cost_convergence: 0.001
+```
+
+### mcmc_options Parameters
+
+<ParamField path="num_steps" type="integer" required>
+  Number of MCMC iterations per walker. More steps = better convergence.
+  
+  - **Minimum**: ~500 for quick tests
+  - **Recommended**: 1000-5000 for production
+  - **Burn-in**: First 50% discarded automatically
+</ParamField>
+
+<ParamField path="num_walkers" type="integer" required>
+  Number of independent MCMC chains (walkers) to run in parallel.
+  
+  - **Minimum**: 2 × num_parameters (emcee requirement)
+  - **Recommended**: 32-128 for good sampling
+  - **More walkers**: Better exploration, more expensive
+</ParamField>
+
+<ParamField path="cost_type" type="string" default="MSE">
+  Cost function type:
+  - `MSE`: Mean squared error (equivalent to Gaussian likelihood)
+  - `AE`: Absolute error
+</ParamField>
+
+<ParamField path="cost_convergence" type="float" default="0.001">
+  Convergence tolerance for cost function.
+</ParamField>
+
+### Debug Mode
+
+For faster testing:
+
+```yaml
+DEBUG: true
+
+debug_mcmc_options:
+  num_steps: 5         # Very short chains
+  num_walkers: 40
+  cost_type: MSE
+  cost_convergence: 0.001
+```
+
+## Running MCMC
+
+### After Parameter Identification
+
+```bash
+# 1. Run optimization first
+./run_param_id.sh 8
+
+# 2. Run MCMC (uses best parameters as starting point)
+./run_mcmc.sh 8
+
+# 3. Plot results
+./plot_mcmc.sh
+```
+
+### Workflow
+
+1. **Optimization** finds best parameters (mode of posterior)
+2. **MCMC** explores around best parameters (full posterior)
+3. **Analysis** examines chains, posteriors, and correlations
+
+## MCMC Algorithm
+
+### Initialization
+
+Walkers start near the best parameters from optimization:
+
+```python
+# Initial positions: small perturbations around best_params
+pos = best_params + 1e-4 × np.random.randn(num_walkers, num_params)
+```
+
+### Sampling Loop
+
+For each step:
+
+1. **Propose** new parameter values for each walker
+2. **Evaluate** log-likelihood for proposed values
+3. **Accept/reject** based on Metropolis-Hastings criterion
+4. **Store** accepted samples
+
+### Log-Likelihood Function
+
+The likelihood connects cost to probability:
+
+```python
+def log_likelihood(params):
+    cost = get_cost_from_params(params)
+    
+    if cost_type == 'MSE':
+        # Gaussian likelihood
+        return -0.5 × cost
+    else:
+        return -cost
+```
+
+For Gaussian noise, minimizing MSE ≡ maximizing likelihood.
+
+### Log-Prior Function
+
+Uniform prior within parameter bounds:
+
+```python
+def log_prior(params):
+    for i, param in enumerate(params):
+        if param < min[i] or param > max[i]:
+            return -np.inf  # Outside bounds
+    return 0.0  # Uniform within bounds
+```
+
+### Log-Posterior Function
+
+```python
+def log_posterior(params):
+    lp = log_prior(params)
+    if not np.isfinite(lp):
+        return -np.inf
+    return lp + log_likelihood(params)
+```
+
+## Output Files
+
+MCMC generates several outputs:
+
+```
+param_id_output/[method]_[model]_[obs]/
+├── mcmc_chain.npy              # Full MCMC chain (steps × walkers × params)
+├── best_param_vals.npy         # Best parameters from MCMC
+├── plots_param_id/
+│   ├── mcmc_chain_plot.pdf     # Trace plots for convergence
+│   └── mcmc_cornerplot_*.pdf   # Corner plots for posteriors
+```
+
+### Chain Array Structure
+
+```python
+chain = np.load('mcmc_chain.npy')
+# Shape: (num_steps, num_walkers, num_params)
+
+# Example: 1000 steps, 64 walkers, 4 parameters
+chain.shape  # (1000, 64, 4)
+```
+
+## Analyzing Results
+
+### Loading MCMC Samples
+
+```python
+from circulatory_autogen import CVS0DParamID
+
+param_id = CVS0DParamID.init_from_dict(inp_data)
+flat_samples, samples, num_params = param_id.get_mcmc_samples()
+
+# flat_samples: (N, num_params) - all samples flattened
+# samples: (num_steps, num_walkers, num_params) - structured
+```
+
+### Automatic Post-Processing
+
+**Burn-in removal:**
+```python
+samples = samples[samples.shape[0]//2:, :, :]  # Discard first 50%
+```
+
+**Stuck chain detection:**
+```python
+# Removes walkers that got stuck (zero variance in blocks)
+for walker in walkers:
+    if std(walker_samples) == 0:
+        remove_walker(walker)
+```
+
+**Flattening:**
+```python
+flat_samples = samples.reshape(-1, num_params)
+```
+
+### Trace Plots
+
+Visualize chain evolution over time:
+
+```
+mcmc_chain_plot.pdf shows:
+- Each parameter vs. step number
+- All walkers overlaid
+- Check for convergence (random walk around mean)
+```
+
+**Good convergence:**
+- Chains mix well (overlapping)
+- No trends or drifts
+- Stationary after burn-in
+
+**Poor convergence:**
+- Chains don't overlap
+- Trends visible
+- Walkers stuck
+
+### Corner Plots
+
+Visualize parameter posteriors and correlations:
+
+```
+mcmc_cornerplot_*.pdf shows:
+- Diagonal: 1D marginal distributions (histograms)
+- Off-diagonal: 2D joint distributions (contours)
+- Quantiles: 5th, 50th, 95th percentiles
+- Truth values: Best parameters from optimization (red lines)
+```
+
+**Interpretation:**
+- **Narrow peaks**: Well-constrained parameters
+- **Wide distributions**: Poorly identified parameters
+- **Correlations**: Off-diagonal structure shows parameter coupling
+- **Multi-modal**: Multiple peaks suggest local minima
+
+### Confidence Intervals
+
+```python
+for param_idx in range(num_params):
+    percentiles = np.percentile(flat_samples[:, param_idx], [5, 50, 95])
+    print(f"Parameter {param_idx}:")
+    print(f"  Median: {percentiles[1]:.6e}")
+    print(f"  90% CI: [{percentiles[0]:.6e}, {percentiles[2]:.6e}]")
+```
+
+Output:
+```
+Parameter 0:
+  Median: 8.432e-4
+  90% CI: [7.123e-4, 9.891e-4]
+```
+
+### Parameter Correlations
+
+```python
+import numpy as np
+
+# Compute correlation matrix
+corr_matrix = np.corrcoef(flat_samples.T)
+
+print("Correlation matrix:")
+print(corr_matrix)
+```
+
+Strong correlations (|r| > 0.7) indicate:
+- Parameters are not independently identifiable
+- Trade-offs exist (increasing one ≈ decreasing another)
+- May need additional data to separate effects
+
+## Convergence Diagnostics
+
+### Visual Checks
+
+1. **Trace plots**: Chains should look like "hairy caterpillars"
+2. **Corner plots**: Smooth, unimodal distributions
+3. **Walker agreement**: All walkers explore same region
+
+### Quantitative Metrics
+
+**Gelman-Rubin statistic** (not implemented, but recommended):
+```python
+import arviz as az
+
+rhat = az.rhat(samples)
+print(f"R-hat: {rhat}")  # Should be < 1.1
+```
+
+**Effective sample size:**
+```python
+eff_n = az.ess(samples)
+print(f"Effective samples: {eff_n}")
+```
+
+## Best Practices
+
+### Burn-in Period
+
+<AccordionGroup>
+  <Accordion title="What is burn-in?">
+    Initial steps where chains haven't reached the posterior distribution yet. These samples are biased by starting positions.
+  </Accordion>
+  
+  <Accordion title="How much to discard?">
+    - **Default**: 50% (automatic in Circulatory Autogen)
+    - **Check trace plots**: Discard samples before convergence
+    - **Conservative**: Discard 70-80% for safety
+  </Accordion>
+</AccordionGroup>
+
+### Number of Samples
+
+**Total samples = (num_steps - burn_in) × num_walkers**
+
+For reliable posteriors:
+- **Minimum**: ~1,000 effective samples
+- **Recommended**: 10,000+ total samples
+- **Example**: 1000 steps × 64 walkers × 0.5 (after burn-in) = 32,000 samples
+
+### Initialization Strategy
+
+**Option 1: From optimizer** (default)
+```python
+pos = best_params + small_noise
+```
+
+**Option 2: Random in bounds**
+```python
+pos = np.random.uniform(param_mins, param_maxs, 
+                        size=(num_walkers, num_params))
+```
+
+**Option 3: Previous MCMC run**
+```python
+pos = previous_chain[-1, :, :]  # Last step of previous run
+```
+
+## Common Issues
+
+### Stuck Chains
+
+**Symptom:** Some walkers have constant parameter values
+
+**Cause:** Initialization outside prior bounds or at low-probability regions
+
+**Solution:** Automatic detection removes stuck walkers:
+```python
+if np.std(walker_samples) == 0:
+    remove_walker(walker_idx)
+```
+
+### Poor Mixing
+
+**Symptom:** Chains don't overlap, stay in separate regions
+
+**Cause:**
+- Too few steps
+- Poor initialization
+- Multi-modal posterior
+
+**Solution:**
+- Increase `num_steps`
+- Use more walkers
+- Run multiple independent chains
+
+### High Autocorrelation
+
+**Symptom:** Samples are not independent
+
+**Cause:** Slow exploration of parameter space
+
+**Solution:**
+- Thin chains (keep every Nth sample)
+- Run longer
+- Use more walkers
+
+```python
+thin = 5
+thinned_samples = samples[::thin, :, :]
+```
+
+## Advanced Usage
+
+### Custom Likelihood Functions
+
+Define custom likelihoods in `funcs_user/cost_funcs_user.py`:
+
+```python
+def custom_log_likelihood(obs_values, model_values, std_values):
+    """
+    Custom likelihood for non-Gaussian noise.
+    
+    Args:
+        obs_values: Ground truth observations
+        model_values: Model predictions
+        std_values: Measurement uncertainties
+    
+    Returns:
+        log_likelihood: Log probability
+    """
+    # Example: Laplace (L1) likelihood
+    residuals = np.abs(obs_values - model_values) / std_values
+    return -np.sum(residuals)
+```
+
+### Comparing Multiple Chains
+
+Run independent MCMC runs and compare:
+
+```python
+chain1 = np.load('run1/mcmc_chain.npy')
+chain2 = np.load('run2/mcmc_chain.npy')
+
+# Check if they converge to same posterior
+mean1 = np.mean(chain1[500:], axis=(0,1))
+mean2 = np.mean(chain2[500:], axis=(0,1))
+
+print("Difference in means:", mean1 - mean2)
+```
+
+## Example Workflow
+
+```yaml
+# user_inputs.yaml
+file_prefix: 3compartment
+param_id_method: genetic_algorithm
+do_mcmc: true
+
+optimiser_options:
+  num_calls_to_function: 10000
+  cost_convergence: 0.001
+  max_patience: 10
+  cost_type: MSE
+
+mcmc_options:
+  num_steps: 2000
+  num_walkers: 64
+  cost_type: MSE
+```
+
+```bash
+# Run optimization
+./run_param_id.sh 8
+
+# Run MCMC
+./run_mcmc.sh 8
+
+# Analyze results
+python -c "
+import numpy as np
+import matplotlib.pyplot as plt
+
+chain = np.load('param_id_output/*/mcmc_chain.npy')
+flat = chain[1000:].reshape(-1, chain.shape[-1])
+
+for i in range(chain.shape[-1]):
+    p5, p50, p95 = np.percentile(flat[:, i], [5, 50, 95])
+    print(f'Param {i}: {p50:.3e} [{p5:.3e}, {p95:.3e}]')
+"
+```
+
+## Output Interpretation
+
+### Well-Identified Parameters
+
+**Corner plot shows:**
+- Narrow, symmetric distributions
+- Low correlation with other parameters
+- 90% CI spans ~1 order of magnitude or less
+
+**Conclusion:** Parameter is well-constrained by data
+
+### Poorly-Identified Parameters
+
+**Corner plot shows:**
+- Wide, flat distributions  
+- Strong correlations with other parameters
+- 90% CI spans multiple orders of magnitude
+- Distribution reaches prior bounds
+
+**Conclusion:** Need more/better data to constrain this parameter
+
+### Strong Correlations
+
+**Corner plot shows:**
+- Elongated ellipses in 2D plots
+- Clear linear relationships
+
+**Interpretation:**
+- Parameters trade off (sloppy model)
+- Only certain combinations matter
+- Consider reparameterization
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Observation Data" icon="chart-line" href="/param-id/observation-data">
+    Improve identifiability with better observables
+  </Card>
+  <Card title="Optimizers" icon="chart-network" href="/param-id/optimizers">
+    Find better starting points for MCMC
+  </Card>
+</CardGroup>

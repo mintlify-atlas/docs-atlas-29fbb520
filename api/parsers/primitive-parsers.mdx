@@ -1,0 +1,332 @@
+---
+title: 'Primitive Parsers'
+description: 'Low-level parsers for CSV, JSON, and YAML files used throughout the framework'
+---
+
+## CSVFileParser
+
+Parser for CSV files with support for multi-string entries.
+
+### Constructor
+
+```python
+CSVFileParser()
+```
+
+No parameters required for initialization.
+
+### Methods
+
+#### get_data_as_dataframe_multistrings
+
+```python
+get_data_as_dataframe_multistrings(filename, has_header=True) -> pd.DataFrame
+```
+
+Returns CSV data as a pandas DataFrame where space-separated entries are converted to lists.
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:531`
+
+<ParamField path="filename" type="str" required>
+  Path to the CSV file
+</ParamField>
+
+<ParamField path="has_header" type="bool" default="True">
+  Whether the CSV file has a header row
+</ParamField>
+
+<ResponseField name="return" type="pd.DataFrame">
+  DataFrame with multi-string entries parsed into lists for columns: `vessel_name`, `inp_vessels`, `out_vessels`
+</ResponseField>
+
+#### get_data_as_dataframe
+
+```python
+get_data_as_dataframe(filename, has_header=True) -> pd.DataFrame
+```
+
+Returns CSV data as a pandas DataFrame.
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:576`
+
+<ParamField path="filename" type="str" required>
+  Path to the CSV file
+</ParamField>
+
+<ParamField path="has_header" type="bool" default="True">
+  Whether the CSV file has a header row
+</ParamField>
+
+#### get_data_as_nparray
+
+```python
+get_data_as_nparray(filename, has_header=True) -> np.ndarray
+```
+
+Returns CSV data as a structured numpy array.
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:592`
+
+<ParamField path="filename" type="str" required>
+  Path to the CSV file
+</ParamField>
+
+<ParamField path="has_header" type="bool" default="True">
+  Whether the CSV file has a header row
+</ParamField>
+
+#### get_param_id_params_as_lists_of_tuples
+
+```python
+get_param_id_params_as_lists_of_tuples(param_id_dir) -> Tuple[List[Tuple], str]
+```
+
+Extracts parameter identification results from a directory.
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:622`
+
+<ParamField path="param_id_dir" type="str" required>
+  Directory containing parameter identification output files:
+  - `param_names_for_gen.csv`: Parameter names
+  - `best_param_vals.npy`: Optimized parameter values
+  - `date.npy`: Date identifier
+</ParamField>
+
+<ResponseField name="return" type="Tuple[List[Tuple[str, float]], str]">
+  Tuple of (list of (parameter_name, value) tuples, date_identifier)
+</ResponseField>
+
+---
+
+## JSONFileParser
+
+Parser for JSON configuration files.
+
+### Constructor
+
+```python
+JSONFileParser()
+```
+
+### Methods
+
+#### json_to_dataframe
+
+```python
+json_to_dataframe(json_path) -> pd.DataFrame
+```
+
+Converts a JSON file to a pandas DataFrame.
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:658`
+
+<ParamField path="json_path" type="str" required>
+  Path to the JSON file
+</ParamField>
+
+#### json_to_dataframe_with_user_dir
+
+```python
+json_to_dataframe_with_user_dir(json_dir, json_user_dir, external_modules_dir) -> pd.DataFrame
+```
+
+Loads and combines JSON files from multiple directories.
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:664`
+
+<ParamField path="json_dir" type="str" required>
+  Directory containing default JSON module configuration files
+</ParamField>
+
+<ParamField path="json_user_dir" type="str" required>
+  Directory containing user-defined module configurations
+</ParamField>
+
+<ParamField path="external_modules_dir" type="str">
+  Optional directory containing external module configurations
+</ParamField>
+
+<ResponseField name="return" type="pd.DataFrame">
+  Combined DataFrame from all JSON files in the specified directories
+</ResponseField>
+
+#### append_module_config_info_to_vessel_df
+
+```python
+append_module_config_info_to_vessel_df(vessel_df, module_df) -> None
+```
+
+Appends module configuration information to vessel DataFrame (modifies in place).
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:701`
+
+<ParamField path="vessel_df" type="pd.DataFrame" required>
+  Vessel array DataFrame to augment
+</ParamField>
+
+<ParamField path="module_df" type="pd.DataFrame" required>
+  Module configuration DataFrame
+</ParamField>
+
+---
+
+## YamlFileParser
+
+Parser for YAML user input files.
+
+### Constructor
+
+```python
+YamlFileParser()
+```
+
+### Methods
+
+#### parse_user_inputs_file
+
+```python
+parse_user_inputs_file(inp_data_dict=None, obs_path_needed=False, 
+                       do_generation_with_fit_parameters=False) -> dict
+```
+
+Parses and validates user input YAML file with comprehensive defaults and path resolution.
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:100`
+
+<ParamField path="inp_data_dict" type="dict">
+  Pre-loaded input dictionary. If None, loads from `user_inputs.yaml`
+</ParamField>
+
+<ParamField path="obs_path_needed" type="bool" default="False">
+  Whether observation data path is required (for parameter identification)
+</ParamField>
+
+<ParamField path="do_generation_with_fit_parameters" type="bool" default="False">
+  Whether to use fitted parameters from parameter identification
+</ParamField>
+
+<ResponseField name="return" type="dict">
+  Validated and expanded input dictionary with resolved paths and defaults for:
+  - Model paths and types
+  - Solver configuration
+  - Time stepping parameters
+  - Parameter identification settings
+  - Sensitivity analysis options
+  - Optimizer options
+</ResponseField>
+
+---
+
+## ObsAndParamDataParser
+
+Parser for observation data and parameter identification results.
+
+### Constructor
+
+```python
+ObsAndParamDataParser()
+```
+
+### Methods
+
+#### parse_obs_data_json
+
+```python
+parse_obs_data_json(param_id_obs_path=None, obs_data_dict=None, 
+                   pre_time=None, sim_time=None) -> dict
+```
+
+Loads observation data from JSON and extracts protocol and prediction information.
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:743`
+
+<ParamField path="param_id_obs_path" type="str">
+  Path to observation data JSON file
+</ParamField>
+
+<ParamField path="obs_data_dict" type="dict">
+  Pre-loaded observation dictionary (alternative to file path)
+</ParamField>
+
+<ParamField path="pre_time" type="float">
+  Pre-simulation time for steady state
+</ParamField>
+
+<ParamField path="sim_time" type="float">
+  Simulation time
+</ParamField>
+
+<ResponseField name="return" type="dict">
+  Dictionary containing:
+  - `gt_df`: Ground truth data DataFrame
+  - `protocol_info`: Experimental protocol metadata
+  - `prediction_info`: Prediction variable specifications
+</ResponseField>
+
+#### process_obs_info
+
+```python
+process_obs_info(gt_df, output_dir, dt) -> dict
+```
+
+Generates detailed observation info dictionary from ground truth DataFrame.
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:817`
+
+<ParamField path="gt_df" type="pd.DataFrame" required>
+  Ground truth data DataFrame
+</ParamField>
+
+<ParamField path="output_dir" type="str" required>
+  Directory to save processed observation data
+</ParamField>
+
+<ParamField path="dt" type="float" required>
+  Simulation time step
+</ParamField>
+
+<ResponseField name="return" type="dict">
+  Comprehensive observation metadata including names, units, data types, operations, weights, and ground truth values
+</ResponseField>
+
+---
+
+## scriptFunctionParser
+
+Parser for user-defined operation and cost functions.
+
+### Constructor
+
+```python
+scriptFunctionParser()
+```
+
+### Methods
+
+#### get_operation_funcs_dict
+
+```python
+get_operation_funcs_dict() -> dict
+```
+
+Loads available operation functions from default and user modules.
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:49`
+
+<ResponseField name="return" type="dict">
+  Dictionary mapping function names (str) to callable functions
+</ResponseField>
+
+#### get_cost_funcs_dict
+
+```python
+get_cost_funcs_dict() -> dict
+```
+
+Loads available cost functions from user module.
+
+Location: `~/workspace/source/src/parsers/PrimitiveParsers.py:76`
+
+<ResponseField name="return" type="dict">
+  Dictionary mapping cost function names (str) to callable functions
+</ResponseField>

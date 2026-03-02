@@ -1,0 +1,345 @@
+---
+title: Operation Functions
+description: Built-in functions for processing model outputs
+---
+
+## Overview
+
+Operation functions transform time-series model outputs into scalar or derived values for comparison with observational data. These functions are used in parameter identification to compute observables from simulation results.
+
+## Decorator
+
+### @series_to_constant
+
+Decorator that marks a function as converting series data to a constant value.
+
+```python
+@series_to_constant
+def custom_operation(x, series_output=False):
+    if series_output:
+        return x
+    else:
+        return np.custom_calc(x)
+```
+
+Functions decorated with `@series_to_constant` should:
+- Accept a `series_output` parameter
+- Return the original series when `series_output=True`
+- Return a scalar constant when `series_output=False`
+
+---
+
+## Statistical Functions
+
+All statistical functions are decorated with `@series_to_constant`.
+
+### max()
+
+Compute the maximum value of a time series.
+
+```python
+max(x, series_output=False)
+```
+
+<ParamField path="x" type="array" required>
+  Input time series data
+</ParamField>
+
+<ParamField path="series_output" type="bool" default="False">
+  If True, return original series; if False, return maximum value
+</ParamField>
+
+<ResponseField name="return" type="float | array">
+  Maximum value when `series_output=False`, otherwise the original series
+</ResponseField>
+
+**Example:**
+```python
+import numpy as np
+from param_id.operation_funcs import max
+
+pressure = np.array([80, 120, 100, 115, 85])
+max_pressure = max(pressure)  # Returns 120
+```
+
+---
+
+### min()
+
+Compute the minimum value of a time series.
+
+```python
+min(x, series_output=False)
+```
+
+<ParamField path="x" type="array" required>
+  Input time series data
+</ParamField>
+
+<ParamField path="series_output" type="bool" default="False">
+  If True, return original series; if False, return minimum value
+</ParamField>
+
+<ResponseField name="return" type="float | array">
+  Minimum value when `series_output=False`, otherwise the original series
+</ResponseField>
+
+**Example:**
+```python
+import numpy as np
+from param_id.operation_funcs import min
+
+flow = np.array([2.5, 1.8, 3.2, 2.0, 1.5])
+min_flow = min(flow)  # Returns 1.5
+```
+
+---
+
+### mean()
+
+Compute the mean (average) value of a time series.
+
+```python
+mean(x, series_output=False)
+```
+
+<ParamField path="x" type="array" required>
+  Input time series data
+</ParamField>
+
+<ParamField path="series_output" type="bool" default="False">
+  If True, return original series; if False, return mean value
+</ParamField>
+
+<ResponseField name="return" type="float | array">
+  Mean value when `series_output=False`, otherwise the original series
+</ResponseField>
+
+**Example:**
+```python
+import numpy as np
+from param_id.operation_funcs import mean
+
+volume = np.array([50, 55, 52, 58, 51])
+avg_volume = mean(volume)  # Returns 53.2
+```
+
+---
+
+### max_minus_min()
+
+Compute the range (difference between maximum and minimum) of a time series.
+
+```python
+max_minus_min(x, series_output=False)
+```
+
+<ParamField path="x" type="array" required>
+  Input time series data
+</ParamField>
+
+<ParamField path="series_output" type="bool" default="False">
+  If True, return original series; if False, return range
+</ParamField>
+
+<ResponseField name="return" type="float | array">
+  Range (max - min) when `series_output=False`, otherwise the original series
+</ResponseField>
+
+**Example:**
+```python
+import numpy as np
+from param_id.operation_funcs import max_minus_min
+
+# Arterial pressure waveform
+pressure = np.array([80, 120, 95, 118, 82])
+pulse_pressure = max_minus_min(pressure)  # Returns 40 (120 - 80)
+```
+
+**Use Case:**
+Commonly used to compute pulse pressure (systolic minus diastolic pressure) in cardiovascular simulations.
+
+---
+
+## Arithmetic Functions
+
+Element-wise arithmetic operations for combining series or constants.
+
+### addition()
+
+Add two arrays or scalars element-wise.
+
+```python
+addition(x1, x2)
+```
+
+<ParamField path="x1" type="array | float" required>
+  First operand
+</ParamField>
+
+<ParamField path="x2" type="array | float" required>
+  Second operand
+</ParamField>
+
+<ResponseField name="return" type="array | float">
+  Element-wise sum: x1 + x2
+</ResponseField>
+
+**Example:**
+```python
+from param_id.operation_funcs import addition
+import numpy as np
+
+left_flow = np.array([2.0, 2.5, 2.2])
+right_flow = np.array([1.8, 2.3, 2.1])
+total_flow = addition(left_flow, right_flow)  # [3.8, 4.8, 4.3]
+```
+
+---
+
+### subtraction()
+
+Subtract two arrays or scalars element-wise.
+
+```python
+subtraction(x1, x2)
+```
+
+<ParamField path="x1" type="array | float" required>
+  First operand (minuend)
+</ParamField>
+
+<ParamField path="x2" type="array | float" required>
+  Second operand (subtrahend)
+</ParamField>
+
+<ResponseField name="return" type="array | float">
+  Element-wise difference: x1 - x2
+</ResponseField>
+
+**Example:**
+```python
+from param_id.operation_funcs import subtraction
+import numpy as np
+
+inflow = np.array([5.0, 5.5, 5.2])
+outflow = np.array([4.5, 5.0, 4.8])
+net_flow = subtraction(inflow, outflow)  # [0.5, 0.5, 0.4]
+```
+
+---
+
+### multiplication()
+
+Multiply two arrays or scalars element-wise.
+
+```python
+multiplication(x1, x2)
+```
+
+<ParamField path="x1" type="array | float" required>
+  First operand
+</ParamField>
+
+<ParamField path="x2" type="array | float" required>
+  Second operand
+</ParamField>
+
+<ResponseField name="return" type="array | float">
+  Element-wise product: x1 * x2
+</ResponseField>
+
+**Example:**
+```python
+from param_id.operation_funcs import multiplication
+import numpy as np
+
+area = np.array([2.0, 2.5, 2.2])  # cm^2
+velocity = np.array([10.0, 12.0, 11.0])  # cm/s
+flow = multiplication(area, velocity)  # [20.0, 30.0, 24.2] cm^3/s
+```
+
+---
+
+### division()
+
+Divide two arrays or scalars element-wise.
+
+```python
+division(x1, x2)
+```
+
+<ParamField path="x1" type="array | float" required>
+  Numerator
+</ParamField>
+
+<ParamField path="x2" type="array | float" required>
+  Denominator
+</ParamField>
+
+<ResponseField name="return" type="array | float">
+  Element-wise quotient: x1 / x2
+</ResponseField>
+
+**Example:**
+```python
+from param_id.operation_funcs import division
+import numpy as np
+
+flow = np.array([20.0, 30.0, 24.2])  # cm^3/s
+area = np.array([2.0, 2.5, 2.2])  # cm^2
+velocity = division(flow, area)  # [10.0, 12.0, 11.0] cm/s
+```
+
+---
+
+## Usage in Parameter Identification
+
+Operation functions are specified in the observational data JSON file to define how to extract observables from model outputs:
+
+```json
+{
+  "observations": [
+    {
+      "variable": "pressure_aorta",
+      "operation": "max",
+      "value": 120.0,
+      "std": 5.0,
+      "data_type": "constant"
+    },
+    {
+      "variable": "pressure_aorta",
+      "operation": "max_minus_min",
+      "value": 40.0,
+      "std": 3.0,
+      "data_type": "constant"
+    }
+  ]
+}
+```
+
+## Creating Custom Operations
+
+You can create custom operation functions and add them using `add_user_operation_func()`:
+
+```python
+import numpy as np
+from param_id.operation_funcs import series_to_constant
+
+@series_to_constant
+def systolic_period(x, series_output=False, threshold=0.8):
+    """Calculate time above threshold * max value."""
+    if series_output:
+        return x
+    else:
+        max_val = np.max(x)
+        above_threshold = x > (threshold * max_val)
+        return np.sum(above_threshold) / len(x)
+
+# Add to parameter identification
+param_id.add_user_operation_func(systolic_period)
+```
+
+## Source Location
+
+`~/workspace/source/src/param_id/operation_funcs.py`

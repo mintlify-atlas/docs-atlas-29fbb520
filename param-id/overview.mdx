@@ -1,0 +1,211 @@
+---
+title: Parameter Identification Overview
+description: Calibrate your Circulatory Autogen model to experimental or clinical data using optimization algorithms
+---
+
+Parameter identification in Circulatory Autogen allows you to calibrate model parameters to match experimental or clinical data. The system implements optimization methods to find parameter values that minimize the error between model outputs and ground truth observables.
+
+## What is Parameter Identification?
+
+Parameter identification is the process of finding optimal parameter values for your model by:
+
+1. Defining which parameters to vary (with bounds)
+2. Specifying target observables from experimental/clinical data
+3. Running an optimization algorithm to minimize the cost function
+4. Obtaining calibrated parameter values
+
+The optimization finds a local minimum that gives the best fit between model predictions and observed data.
+
+## Workflow
+
+### 1. Prerequisites
+
+- A generated CellML model (see Model Generation)
+- Parameter bounds file: `[file_prefix]_params_for_id.csv`
+- Observation data file: `[file_prefix]_obs_data.json`
+- OpenCOR Python environment with MPI (for parallel execution)
+
+### 2. Configuration Files
+
+Create two essential files in your `resources/` directory:
+
+- **`params_for_id.csv`**: Defines parameters to optimize and their bounds
+- **`obs_data.json`**: Defines experimental data, protocols, and cost functions
+
+See [Configuration](/param-id/configuration) for detailed formats.
+
+### 3. Run Parameter Identification
+
+```bash
+./run_param_id.sh <NUM_CORES>
+```
+
+This executes the optimization using MPI parallelization across multiple cores.
+
+### 4. Generate Calibrated Model
+
+After calibration completes:
+
+```bash
+./run_autogeneration_with_id_params.sh
+```
+
+This creates a new model with the optimized parameter values.
+
+### 5. Visualize Results
+
+Plot model outputs against ground truth:
+
+```bash
+./plot_param_id.sh
+```
+
+Plots are saved to `param_id_output/` showing how well the calibrated model matches observations.
+
+## Available Algorithms
+
+Circulatory Autogen supports multiple optimization methods:
+
+### Genetic Algorithm
+
+**Method:** `genetic_algorithm`
+
+- **Best for:** Complex, multi-modal problems with many local minima
+- **Pros:** Robust, well-tested, handles non-smooth cost functions
+- **Cons:** Requires more function evaluations, can be slower
+- **Status:** Default and recommended
+
+See [Optimizers](/param-id/optimizers#genetic-algorithm) for configuration details.
+
+### CMA-ES
+
+**Method:** `CMA-ES`
+
+- **Best for:** Smooth optimization landscapes, faster convergence
+- **Pros:** Efficient gradient-free optimization, supports parallel execution
+- **Cons:** Requires `nevergrad` package
+- **Status:** Well-supported
+
+See [Optimizers](/param-id/optimizers#cma-es) for configuration details.
+
+### Bayesian Optimization
+
+**Method:** `bayesian`
+
+- **Best for:** Expensive function evaluations with smooth landscapes
+- **Pros:** Sample-efficient for expensive simulations
+- **Cons:** Requires `scikit-optimize` package
+- **Status:** Deprecated, untested
+
+<Warning>
+Bayesian optimization is deprecated and untested. Use Genetic Algorithm or CMA-ES instead.
+</Warning>
+
+## MCMC for Uncertainty Quantification
+
+After finding optimal parameters, use Markov Chain Monte Carlo (MCMC) to quantify parameter uncertainty and explore posterior distributions.
+
+See [MCMC](/param-id/mcmc) for details on uncertainty quantification.
+
+## Configuration in user_inputs.yaml
+
+Basic settings in `user_inputs.yaml`:
+
+```yaml
+param_id_method: genetic_algorithm  # or CMA-ES
+param_id_obs_path: /path/to/obs_data.json
+
+dt: 0.01                # Output time step
+pre_time: 20            # Time to reach steady state (can be overridden in obs_data.json)
+sim_time: 2             # Simulation time for comparison
+
+optimiser_options:
+  num_calls_to_function: 10000
+  cost_convergence: 0.001
+  max_patience: 10
+  cost_type: MSE
+```
+
+See [Configuration](/param-id/configuration) for all available options.
+
+## Solver Configuration
+
+Choose a solver for your model type:
+
+```yaml
+solver: CVODE  # OpenCOR backend (default for CellML)
+# solver: CVODE_myokit  # Myokit backend
+# solver: solve_ivp     # For Python models
+
+solver_info:
+  MaximumStep: 0.0001
+  MaximumNumberOfSteps: 5000
+```
+
+For Python models using `solve_ivp`:
+
+```yaml
+solver: solve_ivp
+solver_info:
+  method: BDF  # or RK45, LSODA, etc.
+  dt_solver: 0.0001
+```
+
+## Expected Output
+
+Successful parameter identification produces:
+
+- **Calibrated model**: `generated_models/[file_prefix]_[obs_file_name]/`
+- **Best parameters**: `param_id_output/best_param_vals.npy`
+- **Cost history**: `param_id_output/best_cost_history.csv`
+- **Comparison plots**: `param_id_output/plots_param_id/`
+- **Error metrics**: Percentage and std deviation errors for each observable
+
+## External CellML Models
+
+You can run parameter identification on CellML models not generated by Circulatory Autogen:
+
+1. Set `file_prefix` to your model name (without `.cellml`)
+2. Place model at: `generated_models_dir/<file_prefix>/<file_prefix>.cellml`
+3. Run parameter identification as normal
+
+Calibrated model will be generated at:
+```
+generated_models_dir/<file_prefix>_<obs_file_name>/
+```
+
+<Note>
+Generated models use CellML 2.0 and require newer OpenCOR with LibOpenCOR backend.
+</Note>
+
+## Troubleshooting
+
+**"params_for_id_path does not exist"**
+- Check `file_prefix` matches your CSV filename
+- Verify `resources_dir` path is correct
+- Ensure file is named `[file_prefix]_params_for_id.csv`
+
+**"obs_dt is required for series entries"**
+- Add `obs_dt` field to all series data items in `obs_data.json`
+
+**MPI errors**
+- Ensure OpenMPI or MPICH is installed
+- Verify `mpi4py` is available in your Python environment
+- Check number of cores requested doesn't exceed available processors
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/param-id/configuration">
+    Learn about params_for_id.csv and optimiser_options
+  </Card>
+  <Card title="Observation Data" icon="chart-line" href="/param-id/observation-data">
+    Define experimental data and cost functions
+  </Card>
+  <Card title="Optimizers" icon="chart-network" href="/param-id/optimizers">
+    Compare and configure optimization algorithms
+  </Card>
+  <Card title="MCMC" icon="chart-scatter" href="/param-id/mcmc">
+    Quantify parameter uncertainty
+  </Card>
+</CardGroup>

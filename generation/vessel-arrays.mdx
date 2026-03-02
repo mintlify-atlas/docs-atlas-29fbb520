@@ -1,0 +1,246 @@
+---
+title: Vessel Array Files
+description: Format and structure of vessel_array.csv files, defining vessel types and network connections
+---
+
+The vessel array file is the primary configuration file that defines your cardiovascular model's network structure. It specifies the vessels (components) in your model, their types, and how they connect to each other.
+
+## File Format
+
+Vessel array files are CSV files with the naming convention `[file_prefix]_vessel_array.csv` and must be stored in your `resources_dir` directory.
+
+### Required Columns
+
+Each vessel array file contains five essential columns:
+
+| Column Name | Description |
+|-------------|-------------|
+| `name` | Unique identifier for the vessel/component (e.g., 'heart', 'pvn', 'aortic_root') |
+| `BC_type` | Boundary condition type that defines how the vessel connects to others |
+| `vessel_type` | Module type from the modules config JSON files |
+| `inp_vessels` | Space-separated list of input vessel names |
+| `out_vessels` | Space-separated list of output vessel names |
+
+## Example: 3-Compartment Model
+
+Here's the complete vessel array for a simple 3-compartment cardiovascular model:
+
+```csv 3compartment_vessel_array.csv
+name,                    BC_type,     vessel_type,        inp_vessels,          out_vessels
+pvn,                     vp,          venous,             par,                  heart volume_sum
+par,                     vp,          arterial_simple,    heart,                pvn volume_sum
+heart,                   vp_Ca,       heart,              venous_svc pvn,       aortic_root par volume_sum  
+aortic_root,             vv,          arterial_simple,    heart,                systemic_T volume_sum
+systemic_T,              pp,          terminal,           aortic_root,          venous_svc volume_sum            
+venous_svc,              vp,          venous,             systemic_T,           heart volume_sum                
+volume_sum,              nn,          volume_sum,         pvn par heart aortic_root systemic_T venous_svc, 
+```
+
+This model creates a simple circulation with:
+- Pulmonary venous (pvn) and systemic venous (venous_svc) components
+- Pulmonary arterial (par) component
+- Heart with multiple inputs
+- Aortic root and systemic terminal vessels
+- Volume sum component for total blood volume tracking
+
+## Vessel Types
+
+Vessel types must match entries in the module configuration JSON files located in:
+- `src/generators/resources/*_modules_config.json` (built-in modules)
+- `module_config_user/*_config.json` (user-defined modules)
+
+### Common Vessel Types
+
+<CodeGroup>
+```json Arterial Vessels
+"arterial"              // Full arterial model with compliance
+"arterial_simple"       // Simplified arterial model
+```
+
+```json Venous Vessels
+"venous"                // Standard venous vessel
+```
+
+```json Specialized Components
+"heart"                 // Complete heart model
+"terminal"              // Terminal resistance vessels
+"volume_sum"            // Sums volumes from connected vessels
+```
+
+```json Junction Types
+"split_junction"        // One input, multiple outputs
+"merge_junction"        // Multiple inputs, one output
+"2in2out_junction"      // Two inputs, two outputs
+```
+
+```json Advanced Modules
+"gas_transport_simple"  // Gas transport model
+"pulmonary_GE"          // Pulmonary gas exchange
+"baroreceptor"          // Baroreceptor control
+"chemoreceptor"         // Chemoreceptor control
+```
+</CodeGroup>
+
+## Boundary Condition Types
+
+The `BC_type` determines how variables are coupled between connected vessels:
+
+| BC Type | Meaning | Common Use |
+|---------|---------|------------|
+| `vv` | Volume-Volume | Vessel to vessel, volume continuity |
+| `vp` | Volume-Pressure | Pressure outlet, volume inlet |
+| `pv` | Pressure-Volume | Pressure inlet, volume outlet |
+| `pp` | Pressure-Pressure | Both pressure boundaries |
+| `pp_wCont` | Pressure-Pressure with Control | Includes control mechanisms |
+| `pp_wLocal` | Pressure-Pressure with Local control | Local feedback control |
+| `nn` | None-None | No boundary coupling (e.g., monitoring) |
+| `vp_Ca` | Volume-Pressure with Calcium | Heart with calcium dynamics |
+
+<Note>
+Boundary condition types must match the `BC_type` entries in your module configuration JSON files. The coupling mechanism is defined by the port configuration in those files.
+</Note>
+
+## Connection Rules
+
+### Input and Output Connections
+
+1. **Single connections**: List one vessel name
+   ```csv
+   pvn, vp, venous, par, heart
+   ```
+
+2. **Multiple connections**: Separate vessel names with spaces
+   ```csv
+   heart, vp_Ca, heart, venous_svc pvn, aortic_root par
+   ```
+
+3. **No connections**: Leave blank or use empty field
+   ```csv
+   source_vessel, pp, boundary, , downstream_vessel
+   ```
+
+### Port Matching
+
+Vessels connect when:
+- An `exit_port` in the input vessel matches an `entrance_port` in the output vessel
+- Both ports have the same `port_type` (e.g., "vessel_port")
+- The `BC_types` are compatible
+
+<Steps>
+  <Step title="Exit port sends variables">
+    The input vessel's exit port defines variables to send (e.g., `["v", "u_out"]`)
+  </Step>
+  
+  <Step title="Entrance port receives variables">
+    The output vessel's entrance port defines variables to receive (e.g., `["v_in", "u"]`)
+  </Step>
+  
+  <Step title="Variables are mapped">
+    Autogeneration creates CellML mappings: `v` → `v_in` and `u_out` → `u`
+  </Step>
+</Steps>
+
+## Special Vessel Types
+
+### Volume Sum
+
+The `volume_sum` vessel type creates a component that sums blood volumes from all connected vessels:
+
+```csv
+volume_sum, nn, volume_sum, pvn par heart aortic_root systemic_T venous_svc,
+```
+
+- `BC_type` is `nn` (no boundary coupling)
+- Lists all vessels whose volumes should be summed
+- Useful for conservation checks and total blood volume monitoring
+
+### Terminal Vessels
+
+Terminal vessels represent peripheral resistance:
+
+```csv
+systemic_T, pp, terminal, aortic_root, venous_svc
+```
+
+- Often use `pp` boundary type
+- Model capillary beds or peripheral circulation
+- Connect arterial to venous systems
+
+### Heart Module
+
+The heart is a special multi-chamber component:
+
+```csv
+heart, vp_Ca, heart, venous_svc pvn, aortic_root par
+```
+
+- Can accept multiple venous inputs (IVC, SVC, pulmonary)
+- Multiple arterial outputs (aorta, pulmonary artery)
+- Often uses `vp_Ca` for calcium dynamics
+
+<Note>
+The heart module requires specific input ordering. Venous inputs must be ordered: IVC, SVC, pulmonary. The autogeneration handles this automatically based on vessel names.
+</Note>
+
+## Validation
+
+When you run autogeneration, the system validates:
+
+✓ All input vessels in `inp_vessels` are defined as vessel names
+
+✓ All output vessels in `out_vessels` are defined as vessel names
+
+✓ All `vessel_type` entries exist in module config JSON files
+
+✓ Port types are compatible between connected vessels
+
+✓ Required parameters exist for each vessel type
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive vessel names">
+    Choose names that reflect anatomy or function:
+    - Good: `aortic_root`, `pulmonary_artery`, `systemic_T`
+    - Avoid: `v1`, `vessel_a`, `component_3`
+  </Accordion>
+
+  <Accordion title="Maintain consistent spacing">
+    Use spaces to align columns in your CSV file for readability. While not required for parsing, it makes manual editing much easier.
+  </Accordion>
+
+  <Accordion title="Start simple">
+    Begin with a minimal model (3-5 vessels) and verify it generates correctly before adding complexity.
+  </Accordion>
+
+  <Accordion title="Document your network">
+    Add comments in a separate text file explaining the physiological meaning of each vessel and connection.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Common Errors
+
+**"The input module of [name] is not defined"**
+- A vessel in `inp_vessels` doesn't appear as a `name` in any row
+- Check for typos in vessel names
+
+**"Module [type] has incompatible ports"**
+- The BC types of connected vessels are incompatible
+- Review the module config JSON to verify port types
+
+**"Vessel type [type] not found"**
+- The `vessel_type` doesn't exist in any modules config JSON
+- Verify the module is defined and the name matches exactly
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Parameters" icon="sliders" href="/generation/parameters">
+    Define parameter values for your vessels
+  </Card>
+  <Card title="Configuration" icon="gear" href="/generation/configuration">
+    Configure user_inputs.yaml settings
+  </Card>
+</CardGroup>

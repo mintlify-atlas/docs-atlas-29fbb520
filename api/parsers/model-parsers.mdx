@@ -1,0 +1,126 @@
+---
+title: 'Model Parsers'
+description: 'Parser classes for loading 0D cardiovascular models from CSV and JSON files'
+---
+
+## CSV0DModelParser
+
+Creates a 0D model representation from vessel and parameter CSV files.
+
+### Constructor
+
+```python
+CSV0DModelParser(inp_data_dict, parameter_id_dir=None)
+```
+
+<ParamField path="inp_data_dict" type="dict" required>
+  Dictionary containing input configuration. Required keys:
+  - `vessels_csv_abs_path`: Path to vessel array CSV file
+  - `parameters_csv_abs_path`: Path to parameters CSV file
+  - `external_modules_dir`: Directory for external module definitions
+  - `model_type`: Type of model ('cpp', 'cellml_only', 'python')
+  - `couple_to_1d`: Boolean flag for 1D-0D coupling
+  - `vessels_0d_csv_abs_path`: (if `couple_to_1d` is True) Path to 0D vessel CSV
+  - `vessels_1d_csv_abs_path`: (if `couple_to_1d` is True) Path to 1D vessel CSV
+</ParamField>
+
+<ParamField path="parameter_id_dir" type="str" default="None">
+  Directory containing parameter identification results
+</ParamField>
+
+### Methods
+
+#### split_0d_1d_vessel_array
+
+```python
+split_0d_1d_vessel_array()
+```
+
+Splits a combined vessel array into separate 0D and 1D vessel arrays. This method:
+- Separates FV1D_vessel types from other vessel types
+- Handles volume_sum modules for both 0D and 1D vessels
+- Manages K_tube modules coupled to 1D vessels
+- Creates connection information for 1D-0D coupling
+- Writes separate CSV files for 0D and 1D vessels
+- Generates a JSON file with coupling information
+
+This method is automatically called during model loading when `couple_to_1d` is True.
+
+Location: `~/workspace/source/src/parsers/ModelParsers.py:44`
+
+#### load_model
+
+```python
+load_model() -> CVS0DModel
+```
+
+Loads and validates a 0D cardiovascular model from CSV files.
+
+Returns a `CVS0DModel` object containing:
+- Vessel configuration from CSV
+- Module configuration from JSON
+- Parameter values
+- Parameter identification data (if available)
+
+The method performs the following steps:
+1. Loads vessel data from CSV into a pandas DataFrame
+2. Adds pulmonary system if not defined (for backwards compatibility)
+3. Loads module configuration from JSON
+4. Appends module info to vessel DataFrame
+5. Reduces parameter array to required parameters only
+6. Creates CVS0DModel instance
+7. Validates model using composite checker
+
+Location: `~/workspace/source/src/parsers/ModelParsers.py:406`
+
+<ResponseField name="return" type="CVS0DModel">
+  0D cardiovascular model object ready for simulation or code generation
+</ResponseField>
+
+### Attributes
+
+<ResponseField name="vessel_filename" type="str">
+  Path to the vessel array CSV file
+</ResponseField>
+
+<ResponseField name="vessel_filename_0d" type="str">
+  Path to 0D vessel CSV (set when coupling to 1D)
+</ResponseField>
+
+<ResponseField name="vessel_filename_1d" type="str">
+  Path to 1D vessel CSV (set when coupling to 1D)
+</ResponseField>
+
+<ResponseField name="parameter_filename" type="str">
+  Path to the parameters CSV file
+</ResponseField>
+
+<ResponseField name="external_modules_dir" type="str">
+  Directory containing external module definitions
+</ResponseField>
+
+<ResponseField name="conn_1d_0d_info" type="dict">
+  Dictionary mapping 1D-0D connection indices to connection metadata including:
+  - `vess1d_idx`: Index of 1D vessel
+  - `vess0d_idx`: Index of 0D vessel
+  - `cellml_idx`: CellML model index
+  - `port_idx`: Port index for connection
+  - Additional coupling metadata
+</ResponseField>
+
+### Example
+
+```python
+from parsers.ModelParsers import CSV0DModelParser
+
+inp_data_dict = {
+    'vessels_csv_abs_path': 'resources/model_vessel_array.csv',
+    'parameters_csv_abs_path': 'resources/model_parameters.csv',
+    'external_modules_dir': None,
+    'model_type': 'cellml_only',
+    'couple_to_1d': False
+}
+
+parser = CSV0DModelParser(inp_data_dict)
+model = parser.load_model()
+```

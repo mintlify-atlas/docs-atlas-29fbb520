@@ -1,0 +1,388 @@
+---
+title: Optimizers
+description: Optimization algorithms for parameter identification
+---
+
+## Overview
+
+The optimizers module provides several optimization algorithms for cardiovascular model parameter identification. All optimizers inherit from a common base class and support parallel execution via MPI.
+
+## Base Class: Optimiser
+
+Abstract base class for all optimization algorithms.
+
+### Constructor
+
+```python
+Optimiser(
+    param_id_obj,
+    param_id_info,
+    param_norm_obj,
+    num_params,
+    output_dir,
+    optimiser_options=None,
+    DEBUG=False
+)
+```
+
+<ParamField path="param_id_obj" type="object" required>
+  Parameter identification object providing `get_cost_from_params()` method
+</ParamField>
+
+<ParamField path="param_id_info" type="dict" required>
+  Dictionary with `param_names`, `param_mins`, and `param_maxs` keys
+</ParamField>
+
+<ParamField path="param_norm_obj" type="Normalise_class" required>
+  Object for parameter normalization/unnormalization
+</ParamField>
+
+<ParamField path="num_params" type="int" required>
+  Number of parameters to optimize
+</ParamField>
+
+<ParamField path="output_dir" type="str" required>
+  Directory to save optimization results
+</ParamField>
+
+<ParamField path="optimiser_options" type="dict" default="None">
+  Optimizer-specific options. Common options:
+  - `cost_convergence` (float): Convergence threshold (default: 0.0001)
+  - `max_patience` (int): Max generations without improvement (default: 10)
+</ParamField>
+
+<ParamField path="DEBUG" type="bool" default="False">
+  Debug mode flag
+</ParamField>
+
+### Methods
+
+#### run()
+
+Abstract method that must be implemented by subclasses. Performs optimization and sets `best_param_vals` and `best_cost`.
+
+---
+
+## GeneticAlgorithmOptimiser
+
+Genetic algorithm optimizer with elitism, mutation, and crossbreeding.
+
+### Constructor
+
+Inherits all parameters from `Optimiser` base class.
+
+```python
+GeneticAlgorithmOptimiser(
+    param_id_obj,
+    param_id_info,
+    param_norm_obj,
+    num_params,
+    output_dir,
+    optimiser_options=None,
+    DEBUG=False
+)
+```
+
+### Algorithm Parameters
+
+**Normal Mode** (DEBUG=False):
+- Elite survivors: 12
+- Total survivors: 48
+- Mutations per survivor: 12
+- Crossbreed offspring: 120
+- **Total population**: 192 per generation
+
+**Debug Mode** (DEBUG=True):
+- Elite survivors: 4
+- Total survivors: 6
+- Mutations per survivor: 2
+- Crossbreed offspring: 10
+- **Total population**: 28 per generation
+
+### Optimizer Options
+
+<ParamField path="num_calls_to_function" type="int" required>
+  Maximum number of function evaluations. Must be greater than population size.
+</ParamField>
+
+<ParamField path="cost_convergence" type="float" default="0.0001">
+  Cost threshold for convergence
+</ParamField>
+
+<ParamField path="max_patience" type="int" default="10">
+  Maximum generations without improvement before stopping
+</ParamField>
+
+### Methods
+
+#### run()
+
+Execute genetic algorithm optimization.
+
+```python
+optimizer.run()
+```
+
+The algorithm:
+1. Initializes random population
+2. Evaluates fitness (cost) for each individual
+3. Selects survivors based on fitness
+4. Generates offspring through mutation and crossbreeding
+5. Repeats until convergence or max generations reached
+
+### Example Usage
+
+```python
+from param_id.optimisers import GeneticAlgorithmOptimiser
+
+optimizer = GeneticAlgorithmOptimiser(
+    param_id_obj=param_id,
+    param_id_info={
+        'param_names': ['R1', 'R2', 'C1'],
+        'param_mins': [0.1, 0.1, 0.01],
+        'param_maxs': [10.0, 10.0, 1.0]
+    },
+    param_norm_obj=normalizer,
+    num_params=3,
+    output_dir='./output',
+    optimiser_options={
+        'num_calls_to_function': 10000,
+        'cost_convergence': 0.0001,
+        'max_patience': 10
+    }
+)
+
+optimizer.run()
+print(f"Best parameters: {optimizer.best_param_vals}")
+print(f"Best cost: {optimizer.best_cost}")
+```
+
+---
+
+## BayesianOptimiser
+
+Bayesian optimization using Gaussian processes (requires scikit-optimize).
+
+### Constructor
+
+```python
+BayesianOptimiser(
+    param_id_obj,
+    param_id_info,
+    param_norm_obj,
+    num_params,
+    output_dir,
+    optimiser_options=None,
+    DEBUG=False,
+    acq_func='EI',
+    n_initial_points=5,
+    random_state=1234,
+    acq_func_kwargs=None
+)
+```
+
+<ParamField path="acq_func" type="str" default="'EI'">
+  Acquisition function: `'EI'` (Expected Improvement), `'PI'` (Probability of Improvement), `'LCB'` (Lower Confidence Bound), or `'gp_hedge'`
+</ParamField>
+
+<ParamField path="n_initial_points" type="int" default="5">
+  Number of random initialization points
+</ParamField>
+
+<ParamField path="random_state" type="int" default="1234">
+  Random seed for reproducibility
+</ParamField>
+
+<ParamField path="acq_func_kwargs" type="dict" default="None">
+  Additional keyword arguments for acquisition function
+</ParamField>
+
+### Optimizer Options
+
+<ParamField path="num_calls_to_function" type="int" required>
+  Total number of function evaluations
+</ParamField>
+
+### Methods
+
+#### run()
+
+Execute Bayesian optimization.
+
+```python
+optimizer.run()
+```
+
+**Note**: This optimizer is marked as deprecated and untested in the source code.
+
+### Dependencies
+
+Requires `scikit-optimize`:
+```bash
+pip install scikit-optimize
+```
+
+### Example Usage
+
+```python
+from param_id.optimisers import BayesianOptimiser
+
+optimizer = BayesianOptimiser(
+    param_id_obj=param_id,
+    param_id_info=param_info,
+    param_norm_obj=normalizer,
+    num_params=3,
+    output_dir='./output',
+    optimiser_options={'num_calls_to_function': 500},
+    acq_func='EI',
+    n_initial_points=10
+)
+
+optimizer.run()
+```
+
+---
+
+## CMAESOptimiser
+
+Covariance Matrix Adaptation Evolution Strategy using Nevergrad.
+
+### Constructor
+
+```python
+CMAESOptimiser(
+    param_id_obj,
+    param_id_info,
+    param_norm_obj,
+    num_params,
+    output_dir,
+    optimiser_options=None,
+    DEBUG=False
+)
+```
+
+### Optimizer Options
+
+<ParamField path="num_calls_to_function" type="int" default="10000">
+  Maximum number of function evaluations (optimization budget)
+</ParamField>
+
+<ParamField path="sigma0" type="float" default="0.2 * param_range">
+  Initial standard deviation for CMA-ES. Defaults to 20% of mean parameter range.
+</ParamField>
+
+<ParamField path="cost_convergence" type="float" default="1e-6">
+  Cost threshold for convergence
+</ParamField>
+
+<ParamField path="max_patience" type="int" default="10">
+  Maximum iterations without improvement before stopping
+</ParamField>
+
+### Features
+
+- **Parallel evaluation**: Automatically uses all available MPI processes
+- **Bounded optimization**: Respects parameter min/max constraints
+- **Auto-initialization**: Loads initial values from parameters CSV file
+- **Adaptive step size**: CMA-ES automatically adapts search distribution
+
+### Methods
+
+#### run()
+
+Execute CMA-ES optimization.
+
+```python
+optimizer.run()
+```
+
+The algorithm:
+1. Loads initial parameters from CSV file
+2. Validates parameters are within bounds
+3. Creates bounded parametrization
+4. Iteratively samples candidates and evaluates in parallel
+5. Updates covariance matrix based on results
+6. Stops on convergence or budget exhaustion
+
+### Dependencies
+
+Requires `nevergrad`:
+```bash
+pip install nevergrad
+```
+
+### Example Usage
+
+```python
+from param_id.optimisers import CMAESOptimiser
+
+optimizer = CMAESOptimiser(
+    param_id_obj=param_id,
+    param_id_info={
+        'param_names': ['R1', 'R2', 'C1'],
+        'param_mins': [0.1, 0.1, 0.01],
+        'param_maxs': [10.0, 10.0, 1.0]
+    },
+    param_norm_obj=normalizer,
+    num_params=3,
+    output_dir='./output',
+    optimiser_options={
+        'num_calls_to_function': 5000,
+        'sigma0': 0.5,
+        'cost_convergence': 1e-6,
+        'max_patience': 20
+    }
+)
+
+optimizer.run()
+print(f"Best parameters: {optimizer.best_param_vals}")
+print(f"Best cost: {optimizer.best_cost}")
+```
+
+### Initial Parameter Handling
+
+CMA-ES automatically:
+- Loads initial parameter values from the parameters CSV file
+- Validates that initial values are within specified bounds
+- Sets out-of-bounds parameters to the midpoint of min/max range
+- Prints warnings for any out-of-bounds initial values
+
+---
+
+## Common Attributes
+
+All optimizers set these attributes after running:
+
+<ResponseField name="best_param_vals" type="array">
+  Best parameter values found during optimization
+</ResponseField>
+
+<ResponseField name="best_cost" type="float">
+  Best (minimum) cost achieved
+</ResponseField>
+
+## Output Files
+
+All optimizers save to the output directory:
+
+- `best_param_vals.npy`: Best parameter values (NumPy array)
+- `best_cost.npy`: Best cost value
+- `best_param_vals_history.csv`: Parameter evolution history
+- `best_cost_history.csv`: Cost evolution history (genetic algorithm only)
+
+## MPI Support
+
+All optimizers support parallel execution via MPI:
+
+```bash
+mpirun -n 4 python run_param_id.py
+```
+
+The number of processes should be:
+- **GeneticAlgorithm**: ≤ population size
+- **Bayesian**: Any number (evaluates in parallel)
+- **CMA-ES**: Any number (evaluates in parallel)
+
+## Source Location
+
+`~/workspace/source/src/param_id/optimisers.py`

@@ -1,0 +1,206 @@
+---
+title: Architecture Overview
+description: Understanding the structure and workflow of Circulatory Autogen from model definition to calibration
+---
+
+Circulatory Autogen is a framework for automatically generating cardiovascular system models from modular CellML components. This page provides an overview of the project architecture and the workflow from model definition to simulation and calibration.
+
+## Project Structure
+
+The Circulatory Autogen project directory contains five main folders:
+
+<CardGroup cols={2}>
+  <Card title="resources/" icon="folder">
+    Contains example configuration CSV files that define models, parameters, calibration settings, and ground truth data:
+    - `[file_prefix]_vessel_array.csv` - Model topology and vessel connections
+    - `[file_prefix]_parameters.csv` - Model parameters and values
+    - `[file_prefix]_params_for_id.csv` - Parameters to calibrate
+    - `[file_prefix]_obs_data.json` - Ground truth data for calibration
+  </Card>
+  
+  <Card title="src/" icon="code">
+    Contains the source code for autogeneration, parameter identification, and utilities:
+    - `generators/` - CellML, Python, and C++ model generators
+    - `param_id/` - Parameter identification algorithms
+    - `models/` - Model class definitions (CVS0DModel)
+    - `generators/resources/` - Built-in CellML modules and configs
+  </Card>
+  
+  <Card title="user_run_files/" icon="play">
+    Contains bash run scripts and the main configuration file:
+    - `user_inputs.yaml` - Main config file for run settings
+    - `run_autogeneration.sh` - Script to generate models
+    - `run_param_id.sh` - Script to run parameter identification
+  </Card>
+  
+  <Card title="funcs_user/" icon="function">
+    Contains user-defined functions for:
+    - Calculating output features from model outputs
+    - Custom cost functions for parameter fitting
+    - Corresponds to built-in functions in `src/param_id/operation_funcs.py`
+  </Card>
+  
+  <Card title="module_config_user/" icon="puzzle-piece">
+    Contains user-defined CellML modules and configuration:
+    - `*_modules.cellml` - User-defined CellML modules
+    - `*_modules_config.json` - Module configuration and port definitions
+    - `user_units.cellml` - Custom unit definitions
+    - Supplements built-in modules in `src/generators/resources/`
+  </Card>
+  
+  <Card title="generated_models/" icon="file-code">
+    Auto-generated after running model generation:
+    - Generated CellML files
+    - Python or C++ model files (optional)
+    - Fitted model parameters (after calibration)
+  </Card>
+</CardGroup>
+
+## Recommended Workflow
+
+For best practices, create a separate user directory `[CA_user_dir]` for each specific model:
+
+```bash
+[CA_user_dir]/
+├── [file_prefix]_user_inputs.yaml    # Model-specific configuration
+├── resources/
+│   ├── [file_prefix]_vessel_array.csv
+│   ├── [file_prefix]_parameters.csv
+│   ├── [file_prefix]_params_for_id.csv  # Optional: for calibration
+│   └── [file_prefix]_obs_data.json       # Optional: for calibration
+├── generated_models/                     # Auto-generated
+└── param_id_output/                      # Auto-generated after calibration
+```
+
+<Tip>
+Set `user_inputs_path_override` in the main `user_inputs.yaml` to point to your model-specific `[CA_user_dir]/[file_prefix]_user_inputs.yaml` file.
+</Tip>
+
+## Model Definition to Calibration Workflow
+
+<Steps>
+  <Step title="Define Model Topology">
+    Create a vessel array CSV file (`[file_prefix]_vessel_array.csv`) that specifies:
+    - Vessel names and types
+    - Boundary condition types
+    - Input and output connections between vessels
+    
+    See [Vessel Networks](/concepts/vessel-networks) for details.
+  </Step>
+  
+  <Step title="Define Parameters">
+    Create a parameters CSV file (`[file_prefix]_parameters.csv`) with:
+    - Parameter names (e.g., `R_heart`, `C_aorta`)
+    - Units (must match CellML units)
+    - Values
+    - Data references (citations)
+    
+    <Note>
+    If you forget parameters, autogeneration will create `[file_prefix]_parameters_unfinished.csv` with missing parameters marked as `EMPTY_MUST_BE_FILLED`.
+    </Note>
+  </Step>
+  
+  <Step title="Configure User Inputs">
+    Edit `user_inputs.yaml` to set:
+    - `file_prefix` - Name of your model
+    - `resources_dir` - Path to your resources folder
+    - `generated_models_dir` - Output directory (optional)
+    - `model_type` - `cellml_only` (default), `python`, or `cpp`
+    - `external_modules_dir` - Path to external modules (optional)
+  </Step>
+  
+  <Step title="Run Autogeneration">
+    Generate the model by running:
+    
+    ```bash
+    cd user_run_files
+    ./run_autogeneration.sh
+    ```
+    
+    This creates four CellML files in `generated_models/[file_prefix]/`:
+    - `[file_prefix].cellml` - Main model file
+    - `[file_prefix]_modules.cellml` - Coupled modules
+    - `[file_prefix]_parameters.cellml` - Parameter definitions
+    - `[file_prefix]_units.cellml` - Unit definitions
+  </Step>
+  
+  <Step title="Simulate Model">
+    Open the generated `[file_prefix].cellml` in OpenCOR:
+    - Set simulation time and step size
+    - Configure ODE solver settings
+    - Select variables to plot
+    - Run simulation
+    
+    Alternatively, use OpenCOR's Python interface or generated Python/C++ code.
+  </Step>
+  
+  <Step title="Calibrate Parameters (Optional)">
+    If you need to fit parameters to data:
+    
+    1. Create `[file_prefix]_params_for_id.csv` - specifies which parameters to calibrate and their bounds
+    2. Create `[file_prefix]_obs_data.json` - provides ground truth data to fit
+    3. Run parameter identification:
+    
+    ```bash
+    cd user_run_files
+    ./run_param_id.sh
+    ```
+    
+    Results are saved to `param_id_output/` including fitted parameters, costs, and plots.
+  </Step>
+</Steps>
+
+## CVS0DModel Class
+
+The core model representation is the `CVS0DModel` class defined in `src/models/LumpedModels.py`:
+
+```python
+class CVS0DModel(object):
+    '''
+    Representation of a 0D cardiovascular model
+    '''
+    def __init__(self, vessels_df, parameters_array,
+                 param_id_name_and_vals=None, param_id_date=None):
+        self.vessels_df = vessels_df              # Vessel topology
+        self.parameters_array = parameters_array  # Model parameters
+        self.param_id_date = param_id_date       # Calibration timestamp
+        self.param_id_name_and_vals = param_id_name_and_vals  # Fitted values
+        self.possible_vessel_types = None
+        self.possible_BC_types = None
+```
+
+This class holds:
+- **vessels_df** - DataFrame from the vessel array CSV, defining network topology
+- **parameters_array** - Array of parameter values from the parameters CSV
+- **param_id_name_and_vals** - Dictionary of calibrated parameter values (if calibration was run)
+- **param_id_date** - Timestamp of when parameter identification was performed
+
+## External Modules Directory
+
+You can store modules outside the repository by setting `external_modules_dir` in `user_inputs.yaml`. This directory should contain:
+
+- `*_modules.cellml` - CellML module files
+- `*_modules_config.json` - Module configuration files
+- `user_units.cellml` - Custom unit definitions (optional)
+
+The path can be relative to your `user_inputs.yaml` location.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CellML Modules" icon="puzzle-piece" href="/concepts/cellml-modules">
+    Learn how to create and configure CellML modules
+  </Card>
+  
+  <Card title="Model Architecture" icon="diagram-project" href="/concepts/model-architecture">
+    Understand the vessel-based model structure
+  </Card>
+  
+  <Card title="Vessel Networks" icon="network-wired" href="/concepts/vessel-networks">
+    Define vessel arrays and network topology
+  </Card>
+  
+  <Card title="Model Generation" icon="gears" href="/generation/running-autogeneration">
+    Step-by-step guide to generating models
+  </Card>
+</CardGroup>

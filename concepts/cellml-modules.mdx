@@ -1,0 +1,355 @@
+---
+title: CellML Modules
+description: Understanding how CellML modules are defined, configured, and coupled in Circulatory Autogen
+---
+
+CellML modules are the building blocks of cardiovascular models in Circulatory Autogen. Each module represents a physiological component (e.g., heart chamber, arterial segment, valve) and can be coupled with other modules through defined ports.
+
+## Module Locations
+
+CellML modules and their configurations are stored in two locations:
+
+<CardGroup cols={2}>
+  <Card title="Built-in Modules" icon="box">
+    **Location:** `src/generators/resources/`
+    
+    Contains standard cardiovascular modules:
+    - `BG_modules.cellml` - Bond graph-based vessel modules
+    - `heart_modules.cellml` - Cardiac chambers and valves
+    - `control_modules.cellml` - Baroreceptor and control systems
+    - `gas_exchange_modules.cellml` - Gas transport
+    - Plus corresponding `*_modules_config.json` files
+  </Card>
+  
+  <Card title="User-Defined Modules" icon="user">
+    **Location:** `module_config_user/` or `external_modules_dir`
+    
+    Your custom modules:
+    - `[category]_modules.cellml` - Your CellML modules
+    - `[category]_modules_config.json` - Configuration files
+    - `user_units.cellml` - Custom unit definitions
+  </Card>
+</CardGroup>
+
+## Module Configuration JSON Format
+
+Each CellML module requires a corresponding JSON configuration entry that defines how it connects to other modules. Here's the structure:
+
+```json
+{
+  "vessel_type": "arterial_simple",
+  "BC_type": "vp",
+  "module_format": "cellml",
+  "module_file": "BG_modules.cellml",
+  "module_type": "vp_simple_type",
+  "entrance_ports": [
+    {
+      "port_type": "vessel_port",
+      "variables": ["v_in", "u"]
+    }
+  ],
+  "exit_ports": [
+    {
+      "port_type": "vessel_port",
+      "variables": ["v", "u_out"]
+    },
+    {
+      "port_type": "flow_port",
+      "variables": ["v"]
+    }
+  ],
+  "general_ports": [],
+  "variables_and_units": [
+    ["u", "J_per_m3", "access", "variable"],
+    ["v", "m3_per_s", "access", "variable"],
+    ["R", "Js_per_m6", "access", "constant"],
+    ["C", "m6_per_J", "access", "constant"]
+  ]
+}
+```
+
+### Configuration Fields
+
+<ResponseField name="vessel_type" type="string" required>
+  The name used in the `vessel_type` column of the vessel array CSV. Multiple modules can share the same `vessel_type` if they have different `BC_type` values.
+</ResponseField>
+
+<ResponseField name="BC_type" type="string" required>
+  Boundary condition type used in the `BC_type` column of the vessel array CSV. Common types:
+  - `vv` - Volume flow in, volume flow out
+  - `vp` - Volume flow in, pressure out
+  - `pv` - Pressure in, volume flow out
+  - `pp` - Pressure in, pressure out
+  - `nn` - No standard boundary conditions (for special modules)
+</ResponseField>
+
+<ResponseField name="module_format" type="string" required>
+  Currently only `"cellml"` is supported. Future versions may support `"cpp"` or other formats.
+</ResponseField>
+
+<ResponseField name="module_file" type="string" required>
+  The CellML file containing this module, located in:
+  - `src/generators/resources/`
+  - `module_config_user/`
+  - Your `external_modules_dir`
+</ResponseField>
+
+<ResponseField name="module_type" type="string" required>
+  The name of the `component` (computational environment) within the CellML file.
+</ResponseField>
+
+<ResponseField name="entrance_ports" type="array">
+  Ports that connect when this module is an `out_vessel` of another module. Each port has:
+  - `port_type` - Name identifying this port type
+  - `variables` - List of variables to couple (e.g., `["v_in", "u"]`)
+  - `multi_port` - Optional: `"True"` or `"sum"` for multi-connection support
+</ResponseField>
+
+<ResponseField name="exit_ports" type="array">
+  Ports that connect when this module is an `inp_vessel` of another module.
+</ResponseField>
+
+<ResponseField name="general_ports" type="array">
+  Ports that connect regardless of connection direction. Useful for non-spatial connections like material properties or control signals.
+</ResponseField>
+
+<ResponseField name="variables_and_units" type="array">
+  Array of `[variable_name, unit, access, parameter_type]` entries:
+  - **variable_name** - Name in the CellML file
+  - **unit** - Unit from `units.cellml` (e.g., `"J_per_m3"`, `"m3_per_s"`)
+  - **access** - `"access"` (accessible in simulation) or `"no_access"` (internal only)
+  - **parameter_type** - One of:
+    - `"constant"` - Module-specific constant (set as `[variable_name]_[vessel_name]` in parameters CSV)
+    - `"global_constant"` - Shared constant (set as `[variable_name]` in parameters CSV)
+    - `"variable"` - State variable or computed value
+    - `"boundary_condition"` - Set by connected module or as constant if port not connected
+</ResponseField>
+
+## Port-Based Coupling
+
+Modules are coupled through matching port types. The coupling logic is:
+
+<Steps>
+  <Step title="Spatial Connections (entrance/exit ports)">
+    If `vessel_a` is connected to `vessel_b` (via `inp_vessels`/`out_vessels`):
+    
+    - An `exit_port` of `vessel_a` couples to an `entrance_port` of `vessel_b` **if they have the same `port_type`**
+    - Variables in the ports are mapped in order: `["v", "u_out"]` → `["v_in", "u"]`
+  </Step>
+  
+  <Step title="Non-spatial Connections (general ports)">
+    A `general_port` couples to **any** entrance, exit, or general port with the same `port_type` in connected vessels.
+    
+    Example: A material property module can connect to a vessel module via a `"stiffness_port"` general port.
+  </Step>
+  
+  <Step title="Multi-port Connections">
+    Set `"multi_port": "True"` to allow a port variable to couple to multiple other modules.
+    
+    Use `"multi_port": "sum"` for variables that sum inputs from multiple connections (e.g., merge junctions).
+  </Step>
+</Steps>
+
+<Warning>
+When creating a new module, ensure port types only match where coupling is intended. Unintended port matches will create unwanted connections.
+</Warning>
+
+## Built-in vs User-Defined Modules
+
+### Built-in Modules
+
+The `src/generators/resources/` directory contains production-ready modules:
+
+- **BG_modules.cellml** - Arterial, venous, terminal vessels with various BC types
+- **heart_modules.cellml** - Cardiac chambers, valves, activation functions
+- **control_modules.cellml** - Baroreceptors, chemoreceptors, control systems
+- **coupling_modules.cellml** - Split and merge junctions
+- **gas_exchange_modules.cellml** - Oxygen and CO2 transport
+
+Each has a corresponding `*_modules_config.json` file.
+
+### User-Defined Modules
+
+Create custom modules in `module_config_user/` (or `external_modules_dir`):
+
+1. **Create or add to a CellML file:**
+   ```
+   module_config_user/[category]_modules.cellml
+   ```
+
+2. **Create matching JSON config:**
+   ```
+   module_config_user/[category]_modules_config.json
+   ```
+
+3. **Define custom units (if needed):**
+   ```
+   module_config_user/user_units.cellml
+   ```
+   
+   Otherwise, use units from `src/generators/resources/units.cellml`
+
+## Example: Creating a New Module
+
+Let's create a simple piezoelectric sodium channel module for a tutorial.
+
+### 1. CellML Module Structure
+
+A typical module contains:
+- **Variable declarations** - State variables and parameters
+- **Constitutive parameters** - Constants and initial conditions
+- **Constitutive relations** - Algebraic equations
+- **ODE equations** - Differential equations
+
+### 2. Module Configuration
+
+From `tutorial_module_config.json`:
+
+```json
+{
+  "vessel_type": "i_piezo_Na_tutorial",
+  "BC_type": "nn",
+  "module_format": "cellml",
+  "module_file": "tutorial_modules.cellml",
+  "module_type": "i_piezo_Na_tutorial",
+  "entrance_ports": [],
+  "exit_ports": [],
+  "general_ports": [
+    {
+      "port_type": "membrane_mVage",
+      "variables": ["Vm"]
+    },
+    {
+      "port_type": "Na_Nernst_potential",
+      "variables": ["E_Na"]
+    }
+  ],
+  "variables_and_units": [
+    ["I_piezo", "picoA", "access", "variable"],
+    ["g", "nS", "access", "constant"],
+    ["Vm", "milliV", "access", "boundary_condition"],
+    ["E_Na", "milliV", "access", "boundary_condition"],
+    ["m_V", "dimensionless", "access", "variable"],
+    ["tau_V", "ms", "access", "constant"],
+    ["V_50", "milliV", "access", "constant"]
+  ]
+}
+```
+
+**Key features:**
+- `BC_type: "nn"` - No standard boundary conditions (ion channel)
+- Two `general_ports` - Couples to membrane voltage and Nernst potential
+- `Vm` and `E_Na` are `boundary_condition` - Set by connected modules or as constants
+- `g`, `tau_V`, `V_50` are `constant` - Must be defined in parameters CSV as `g_[vessel_name]`, etc.
+
+### 3. Using in Vessel Array
+
+Add to your vessel array CSV:
+
+```csv
+name,BC_type,vessel_type,inp_vessels,out_vessels
+piezo_channel,nn,i_piezo_Na_tutorial,smc_model,smc_model
+```
+
+The `general_ports` will automatically couple to the SMC model's matching ports.
+
+## Module Coupling Example
+
+From the `3compartment_vessel_array.csv`:
+
+```csv
+name,BC_type,vessel_type,inp_vessels,out_vessels
+heart,vp_Ca,heart,venous_svc pvn,aortic_root par volume_sum
+aortic_root,vv,arterial_simple,heart,systemic_T volume_sum
+```
+
+Coupling between `heart` and `aortic_root`:
+
+1. `heart` has `BC_type: vp_Ca` (volume flow in, pressure out)
+2. `aortic_root` has `BC_type: vv` (volume flow in, volume flow out)
+3. From `heart_modules_config.json`, the heart has an `exit_port` with `"vessel_port"` type
+4. From `BG_modules_config.json`, `arterial_simple` with `BC_type: vv` has an `entrance_port` with `"vessel_port"` type
+5. The variables couple: heart's `["v", "u_out"]` → aortic_root's `["v_in", "u"]`
+
+## Parameter Naming Convention
+
+In the parameters CSV:
+
+<CodeGroup>
+```csv Module-specific constants
+variable_name,units,value,data_reference
+R_heart,Js_per_m6,1000,Smith2020Cardiac
+C_aortic_root,m6_per_J,0.0001,Jones2019Arterial
+```
+
+```csv Global constants
+variable_name,units,value,data_reference
+rho,Js2_per_m5,1050,StandardBloodDensity
+mu,Js_per_m3,0.004,StandardBloodViscosity
+```
+</CodeGroup>
+
+- **Constants** (`parameter_type: "constant"`) use `[variable_name]_[vessel_name]` format
+- **Global constants** (`parameter_type: "global_constant"`) use just `[variable_name]`
+- **Boundary conditions** (`parameter_type: "boundary_condition"`) only need values if the port is not connected
+
+## Converting Existing CellML Models
+
+Circulatory Autogen provides a conversion script for existing CellML models:
+
+```python
+# src/scripts/generate_modules_files.py
+input_model = "path/to/existing_model.cellml"
+output_dir = "path/to/output"
+file_prefix = "my_model"
+vessel_name = "my_vessel"
+time_variable = "t"
+component_name = "main_component"
+```
+
+This generates:
+- `[file_prefix]_modules.cellml`
+- `[file_prefix]_module_config.json`
+- `[file_prefix]_vessel_array.csv`
+- `[file_prefix]_parameters.csv`
+- `[file_prefix]_user_inputs.yaml`
+
+See [Custom Modules Tutorial](/tutorials/custom-modules) for details on creating your own modules.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive port types">
+    Name ports clearly to avoid unintended coupling:
+    - ✅ `"vessel_port"`, `"flow_port"`, `"Ca_concentration_port"`
+    - ❌ `"port1"`, `"data"`, `"input"`
+  </Accordion>
+  
+  <Accordion title="Minimize general ports">
+    Use `entrance_ports`/`exit_ports` for spatial connections, `general_ports` only for non-spatial connections like material properties or control signals.
+  </Accordion>
+  
+  <Accordion title="Set access carefully">
+    Use `"no_access"` for internal variables to reduce memory usage. Only set `"access"` for variables you need to plot or analyze.
+  </Accordion>
+  
+  <Accordion title="Leverage global constants">
+    Use `global_constant` for parameters shared across all modules (e.g., blood density, universal gas constant).
+  </Accordion>
+  
+  <Accordion title="Document your modules">
+    Add comments in your CellML files and maintain a separate document describing each module's physiology and parameters.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Model Architecture" icon="diagram-project" href="/concepts/model-architecture">
+    Learn how modules form complete cardiovascular models
+  </Card>
+  
+  <Card title="Vessel Networks" icon="network-wired" href="/concepts/vessel-networks">
+    Define vessel arrays and network topology
+  </Card>
+</CardGroup>

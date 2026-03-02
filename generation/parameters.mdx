@@ -1,0 +1,385 @@
+---
+title: Parameter Files
+description: Format of parameters.csv files, parameter naming conventions, units, and value specifications
+---
+
+Parameter files define all constant values needed for your cardiovascular model. Each vessel type requires specific parameters, and the autogeneration system helps you identify missing values.
+
+## File Format
+
+Parameter files are CSV files named `[file_prefix]_parameters.csv` and stored in your `resources_dir`.
+
+### Required Columns
+
+| Column Name | Description |
+|-------------|-------------|
+| `variable_name` | Parameter identifier following naming conventions |
+| `units` | Unit type from the CellML units file |
+| `value` | Numerical value or scientific notation |
+| `data_reference` | Source citation or note |
+
+## Example: 3-Compartment Parameters
+
+Here's a sample from the 3-compartment model parameters file:
+
+```csv 3compartment_parameters.csv
+variable_name,units,value,data_reference
+R_pvn,Js_per_m6,1333000,Blanco_2013_Table_8
+q_C_init_pvn,m3,0.0001,user_defined
+C_pvn,m6_per_J,0.0000000060015,to_be_identified
+u_ext_pvn,J_per_m3,0,user_defined
+I_pvn,Js2_per_m6,0.000001,Blanco_2013_Table_8
+q_us_0_pvn,m3,0,user_defined
+Delta_q_us_pvn,dimensionless,0,user_defined
+Delta_C_pvn,dimensionless,0,user_defined
+R_par,Js_per_m6,10664000,Blanco_2013_Table_8
+C_par,m6_per_J,3.09077e-10,to_be_identified
+u_ext_par,J_per_m3,0,user_defined
+T,second,1.0,Liang_2009_Table_2
+rho,Js2_per_m5,1050,known
+```
+
+## Naming Conventions
+
+Parameter names follow strict conventions based on whether they are vessel-specific or global.
+
+### Vessel-Specific Parameters
+
+For parameters that vary by vessel, use the format:
+
+```
+[variable_name]_[vessel_name]
+```
+
+**Examples:**
+- `R_pvn` - Resistance of the pulmonary venous vessel
+- `C_aortic_root` - Compliance of the aortic root
+- `I_venous_svc` - Inertance of the superior vena cava
+
+<Note>
+The `vessel_name` portion must exactly match a `name` entry in your vessel_array.csv file.
+</Note>
+
+### Global Parameters
+
+Parameters shared across all vessels use just the variable name:
+
+```
+[variable_name]
+```
+
+**Examples:**
+- `T` - Cardiac cycle period (global timing)
+- `rho` - Blood density (same throughout)
+- `dt` - Time step for simulation
+
+### How Autogeneration Distinguishes Types
+
+In your module config JSON files, parameters are marked as:
+- `"constant"` - Vessel-specific, requires `[name]_[vessel]` format
+- `"global_constant"` - Shared, requires only `[name]` format
+
+```json Example from module config
+[
+  ["R", "Js_per_m6", "access", "constant"],          // Vessel-specific
+  ["T", "second", "access", "global_constant"],      // Global
+  ["v", "m3_per_s", "access", "variable"]            // State variable (not in params file)
+]
+```
+
+## Units
+
+All units must be defined in the CellML units files:
+- `src/generators/resources/units.cellml` (built-in units)
+- `module_config_user/user_units.cellml` (custom units)
+
+### Common Units
+
+<CodeGroup>
+```yaml Pressure & Flow
+J_per_m3           # Pressure (Pascals)
+Js_per_m6          # Resistance
+m3_per_s           # Flow rate (volumetric)
+L_per_s            # Flow rate (liters/second)
+```
+
+```yaml Volume & Compliance
+m3                 # Volume
+litre              # Volume (alternative)
+m6_per_J           # Compliance
+```
+
+```yaml Time & Inertance
+second             # Time
+Js2_per_m6         # Inertance
+```
+
+```yaml Physical Properties
+Js2_per_m5         # Density
+metre              # Length
+m2                 # Area
+```
+
+```yaml Dimensionless
+dimensionless      # Ratios, coefficients, etc.
+```
+</CodeGroup>
+
+<Note>
+If you need a unit not in the standard units file, add it to `module_config_user/user_units.cellml` before running autogeneration.
+</Note>
+
+## Value Formats
+
+### Standard Notation
+
+```csv
+R_pvn,Js_per_m6,1333000,Blanco_2013_Table_8
+T,second,1.0,Liang_2009_Table_2
+```
+
+### Scientific Notation
+
+Use `e` notation for very large or small values:
+
+```csv
+C_par,m6_per_J,3.09077e-10,to_be_identified
+q_lv_us,m3,5e-6,Korakianitis_2006_Table_1
+```
+
+### Zero Values
+
+```csv
+u_ext_pvn,J_per_m3,0,user_defined
+q_0_par,m3,0,user_defined_TO_DO
+```
+
+## Data References
+
+The `data_reference` column documents the source of each parameter value. Use these conventions:
+
+### Literature References
+
+Format: `[LastName][Year][OptionalDetail]`
+
+```csv
+variable_name,units,value,data_reference
+R_pvn,Js_per_m6,1333000,Blanco_2013_Table_8
+E_ra_A,J_per_m6,7998000,Liang_2009_Table_2
+K_vo_trv,m3_per_Js,0.3,Mynard_2012
+r_0_aortic_root,metre,0.014865,Mynard&Smolich_2015
+```
+
+### User-Defined Values
+
+```csv
+q_C_init_pvn,m3,0.0001,user_defined
+u_ext_par,J_per_m3,0,user_defined_assumption
+q_us_systemic_T,m3,0.00245,user_defined_70%Of3.5LVenousTotBloodVolume
+```
+
+### Values for Parameter Identification
+
+```csv
+C_pvn,m6_per_J,0.0000000060015,to_be_identified
+q_lv_init,m3,0.002,to_be_identified
+K_vo_aov,m3_per_Js,0.04,to_be_identified
+```
+
+### Calculated or Known Values
+
+```csv
+rho,Js2_per_m5,1050,known
+R_T_systemic_T,Js_per_m6,110000000,calculated_from_mean_P_and_v
+C_T_systemic_T,m6_per_J,0.0000001,calculated_from_approx_P_and_q
+```
+
+## Parameter Types by Vessel
+
+### Arterial Vessels (Simple)
+
+Required parameters for `vessel_type: arterial_simple`:
+
+```csv
+R_[vessel_name],Js_per_m6,[value],[ref]          # Resistance
+C_[vessel_name],m6_per_J,[value],[ref]           # Compliance  
+I_[vessel_name],Js2_per_m6,[value],[ref]         # Inertance
+u_ext_[vessel_name],J_per_m3,[value],[ref]       # External pressure
+u_0_[vessel_name],J_per_m3,[value],[ref]         # Reference pressure
+q_0_[vessel_name],m3,[value],[ref]               # Reference volume
+```
+
+### Venous Vessels
+
+Required parameters for `vessel_type: venous`:
+
+```csv
+R_[vessel_name],Js_per_m6,[value],[ref]
+C_[vessel_name],m6_per_J,[value],[ref]
+I_[vessel_name],Js2_per_m6,[value],[ref]
+u_ext_[vessel_name],J_per_m3,[value],[ref]
+q_C_init_[vessel_name],m3,[value],[ref]          # Initial capacitor volume
+q_us_0_[vessel_name],m3,[value],[ref]            # Unstressed volume
+Delta_q_us_[vessel_name],dimensionless,[value],[ref]
+Delta_C_[vessel_name],dimensionless,[value],[ref]
+```
+
+### Heart Module
+
+Global timing parameters:
+
+```csv
+T,second,1.0,Liang_2009_Table_2                   # Cardiac period
+T_ac,second,0.17,[ref]                            # Atrial contraction time
+T_ar,second,0.17,[ref]                            # Atrial relaxation time  
+T_vc,second,0.30,[ref]                            # Ventricular contraction time
+T_vr,second,0.15,[ref]                            # Ventricular relaxation time
+t_astart,second,0.8,[ref]                         # Atrial activation start
+t_vstart,second,0,[ref]                           # Ventricular activation start
+```
+
+Chamber-specific elastances:
+
+```csv
+q_ra_us,m3,0.000004,[ref]                         # Right atrium unstressed volume
+q_ra_init,m3,0.000004,[ref]                       # Right atrium initial volume
+E_ra_A,J_per_m6,7998000,[ref]                     # Right atrium elastance A
+E_ra_B,J_per_m6,9331000,[ref]                     # Right atrium elastance B
+```
+
+Valve parameters (per valve: trv, puv, miv, aov):
+
+```csv
+K_vo_aov,m3_per_Js,0.04,[ref]                     # Opening coefficient
+K_vc_aov,m3_per_Js,0.04,[ref]                     # Closing coefficient  
+M_rg_aov,dimensionless,0,[ref]                    # Regurgitation multiplier
+M_st_aov,dimensionless,1,[ref]                    # Stenosis multiplier
+l_eff,metre,0.01,[ref]                            # Effective length
+A_nn_aov,m2,0.000314,[ref]                        # Annulus area
+```
+
+### Terminal Vessels
+
+Required parameters for `vessel_type: terminal`:
+
+```csv
+R_T_[vessel_name],Js_per_m6,[value],[ref]         # Terminal resistance
+C_T_[vessel_name],m6_per_J,[value],[ref]          # Terminal compliance
+u_ext_[vessel_name],J_per_m3,[value],[ref]        # External pressure
+q_us_[vessel_name],m3,[value],[ref]               # Unstressed volume
+q_init_[vessel_name],m3,[value],[ref]             # Initial volume
+```
+
+## Automated Parameter Discovery
+
+If you're unsure which parameters are needed, run autogeneration without a complete parameters file:
+
+<Steps>
+  <Step title="Create vessel array">
+    Define your model structure in `[file_prefix]_vessel_array.csv`
+  </Step>
+  
+  <Step title="Create minimal parameters file">
+    Create `[file_prefix]_parameters.csv` with just the header row:
+    ```csv
+    variable_name,units,value,data_reference
+    ```
+  </Step>
+  
+  <Step title="Run autogeneration">
+    ```bash
+    cd user_run_files
+    ./run_autogeneration.sh
+    ```
+  </Step>
+  
+  <Step title="Check generated unfinished file">
+    The system creates `[file_prefix]_parameters_unfinished.csv` with all required parameters marked `EMPTY_MUST_BE_FILLED`
+  </Step>
+  
+  <Step title="Fill in values">
+    Add values and references to the unfinished file, then rename it by removing `_unfinished`
+  </Step>
+  
+  <Step title="Re-run autogeneration">
+    Run the generation script again with complete parameters
+  </Step>
+</Steps>
+
+## Parameter Identification Integration
+
+Parameters marked `to_be_identified` can be calibrated using the parameter identification system:
+
+```csv
+C_pvn,m6_per_J,0.0000000060015,to_be_identified
+K_vo_aov,m3_per_Js,0.04,to_be_identified
+```
+
+These initial values serve as starting points for optimization. After parameter identification completes:
+
+1. Identified values are written to `generated_models/[file_prefix]/[file_prefix]_parameters.csv`
+2. The `data_reference` column is updated to `[date]_identified`
+3. Values use high-precision scientific notation (e.g., `3.0907700000e-10`)
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use consistent reference formats">
+    Standardize citation format across your parameters file. This helps track parameter provenance and update values when better data becomes available.
+  </Accordion>
+
+  <Accordion title="Include calculation notes">
+    For derived values, note the calculation method:
+    ```csv
+    R_calculated,Js_per_m6,110000000,calculated_from_mean_P_and_v
+    ```
+  </Accordion>
+
+  <Accordion title="Start with reasonable estimates">
+    Even for `to_be_identified` parameters, provide physiologically reasonable initial values. This helps parameter identification converge faster.
+  </Accordion>
+
+  <Accordion title="Document assumptions">
+    When making assumptions (e.g., setting external pressure to zero), note this clearly:
+    ```csv
+    u_ext_pvn,J_per_m3,0,user_defined_assumes_no_external_pressure
+    ```
+  </Accordion>
+
+  <Accordion title="Use version control">
+    Track your parameters files in git to maintain history of value changes and calibrations.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Common Issues
+
+**"All parameters have not been given values"**
+- Check the generated `*_parameters_unfinished.csv` file
+- Look for `EMPTY_MUST_BE_FILLED` entries
+- Verify parameter names match the naming convention
+
+**"Unit [unit_name] not found"**
+- The unit doesn't exist in `units.cellml` or `user_units.cellml`
+- Check for typos in the unit name
+- Add custom units to `user_units.cellml` if needed
+
+**"Parameter [name] not found"**
+- Mismatch between vessel_array vessel names and parameter suffixes
+- Verify vessel names are consistent across files
+
+**Invalid numeric format**
+- Don't use commas in numbers: `1333000` not `1,333,000`
+- Scientific notation uses `e`: `3.09e-10` not `3.09 × 10^-10`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/generation/configuration">
+    Set up user_inputs.yaml
+  </Card>
+  <Card title="Run Autogeneration" icon="play" href="/generation/running-autogeneration">
+    Generate your model
+  </Card>
+</CardGroup>

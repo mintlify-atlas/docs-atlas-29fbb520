@@ -1,0 +1,354 @@
+---
+title: "3-Compartment Model Example"
+description: "Detailed walkthrough of the 3-compartment circulatory model with heart, systemic, and pulmonary circulation"
+---
+
+This tutorial provides a detailed walkthrough of the 3-compartment example model included with Circulatory Autogen. This model represents a simplified cardiovascular system with heart, systemic circulation, and pulmonary circulation.
+
+## Prerequisites
+
+- OpenCOR Python environment configured
+- Completed the [Basic Model Tutorial](/tutorials/basic-model)
+- Example files from `resources/` directory
+
+## Model overview
+
+The 3-compartment model includes:
+- **Heart**: Four-chamber heart with valves
+- **Systemic circulation**: Aortic root → systemic terminal resistance → vena cava
+- **Pulmonary circulation**: Pulmonary artery → pulmonary vein
+- **Volume tracking**: Total blood volume conservation
+
+![Simple Model of Cardiovascular System](images/cardiovascular-system.png)
+
+The schematic shows:
+- Boundary conditions at each connection
+- Vessel names and types
+- Direction of blood flow
+- Vein connections back to the heart
+
+## Understanding the vessel array
+
+Let's examine the 3-compartment vessel array structure:
+
+```csv 3compartment_vessel_array.csv
+name,BC_type,vessel_type,inp_vessels,out_vessels
+pvn,vp,venous,par,heart volume_sum
+par,vp,arterial_simple,heart,pvn volume_sum
+heart,vp_Ca,heart,venous_svc pvn,aortic_root par volume_sum  
+aortic_root,vv,arterial_simple,heart,systemic_T volume_sum
+systemic_T,pp,terminal,aortic_root,venous_svc volume_sum            
+venous_svc,vp,venous,systemic_T,heart volume_sum                
+volume_sum,nn,volume_sum,pvn par heart aortic_root systemic_T venous_svc,
+```
+
+### Vessel breakdown
+
+<AccordionGroup>
+  <Accordion title="Pulmonary vein (pvn)" icon="lungs">
+    - **BC_type**: `vp` (input flow, output pressure)
+    - **vessel_type**: `venous`
+    - **Input**: Pulmonary artery (`par`)
+    - **Output**: Heart and volume sum module
+    
+    The pulmonary vein carries oxygenated blood from the lungs to the heart.
+  </Accordion>
+  
+  <Accordion title="Pulmonary artery (par)" icon="heart-pulse">
+    - **BC_type**: `vp` (input flow, output pressure)
+    - **vessel_type**: `arterial_simple`
+    - **Input**: Heart
+    - **Output**: Pulmonary vein and volume sum
+    
+    The pulmonary artery carries deoxygenated blood from the heart to the lungs.
+  </Accordion>
+  
+  <Accordion title="Heart" icon="heart">
+    - **BC_type**: `vp_Ca` (special heart boundary condition with calcium dynamics)
+    - **vessel_type**: `heart`
+    - **Inputs**: Superior vena cava (`venous_svc`) and pulmonary vein (`pvn`)
+    - **Outputs**: Aortic root, pulmonary artery, and volume sum
+    
+    The heart module includes:
+    - Four chambers (RA, RV, LA, LV)
+    - Four valves (tricuspid, pulmonary, mitral, aortic)
+    - Time-varying elastance model
+    
+    <Note>
+      Input/output order matters for the heart module:
+      
+      **Inputs**: 
+      1. Inferior/superior vena cava
+      2. (Superior vena cava if both)
+      3. Pulmonary vein
+      
+      **Outputs**:
+      1. Aorta
+      2. Pulmonary artery
+    </Note>
+  </Accordion>
+  
+  <Accordion title="Aortic root" icon="droplet">
+    - **BC_type**: `vv` (input flow, output flow)
+    - **vessel_type**: `arterial_simple`
+    - **Input**: Heart
+    - **Output**: Systemic terminal resistance and volume sum
+    
+    Represents the first section of the aorta with compliance and inertance.
+  </Accordion>
+  
+  <Accordion title="Systemic terminal (systemic_T)" icon="diagram-project">
+    - **BC_type**: `pp` (input pressure, output pressure)
+    - **vessel_type**: `terminal`
+    - **Input**: Aortic root
+    - **Output**: Superior vena cava and volume sum
+    
+    Models the systemic circulation resistance and compliance. Terminal vessels should use BC_type starting with `pp`.
+  </Accordion>
+  
+  <Accordion title="Superior vena cava (venous_svc)" icon="circle-nodes">
+    - **BC_type**: `vp` (input flow, output pressure)
+    - **vessel_type**: `venous`
+    - **Input**: Systemic terminal
+    - **Output**: Heart and volume sum
+    
+    Returns deoxygenated blood from the body to the heart.
+  </Accordion>
+  
+  <Accordion title="Volume sum (volume_sum)" icon="calculator">
+    - **BC_type**: `nn` (no boundary conditions)
+    - **vessel_type**: `volume_sum`
+    - **Inputs**: All vessels
+    - **Outputs**: None
+    
+    Tracks total blood volume across the system for conservation verification.
+  </Accordion>
+</AccordionGroup>
+
+## Examining the parameters
+
+The parameters file defines constants for each vessel. Here are key examples:
+
+<CodeGroup>
+```csv Venous parameters
+variable_name,units,value,data_reference
+R_pvn,Js_per_m6,1333000,Blanco_2013_Table_8
+C_pvn,m6_per_J,0.0000000060015,to_be_identified
+I_pvn,Js2_per_m6,0.000001,Blanco_2013_Table_8
+u_ext_pvn,J_per_m3,0,user_defined
+q_C_init_pvn,m3,0.0001,user_defined
+```
+
+```csv Heart parameters
+variable_name,units,value,data_reference
+T,second,1.0,Liang_2009_Table_2
+q_ra_us,m3,0.000004,Korakianitis_2006_Table_1
+q_rv_us,m3,0.00001,Korakianitis_2006_Table_1
+q_la_us,m3,0.000004,Korakianitis_2006_Table_1
+q_lv_us,m3,0.000005,Korakianitis_2006_Table_1
+E_ra_A,J_per_m6,7998000,Liang_2009_Table_2
+E_rv_A,J_per_m6,73315000,Liang_2009_Table_2
+E_la_A,J_per_m6,9331000,Liang_2009_Table_2
+E_lv_A,J_per_m6,366575000,Liang_2009_Table_2
+```
+
+```csv Valve parameters
+variable_name,units,value,data_reference
+K_vo_trv,m3_per_Js,0.3,Mynard_2012
+K_vo_puv,m3_per_Js,0.2,Mynard_2012
+K_vo_miv,m3_per_Js,0.3,Mynard_2012
+K_vo_aov,m3_per_Js,0.04,to_be_identified
+A_nn_trv,m2,0.0009,to_be_identified
+A_nn_puv,m2,0.0004,to_be_identified
+A_nn_miv,m2,0.0006,to_be_identified
+A_nn_aov,m2,0.000314,defined_by_user_from_BB128
+```
+
+```csv Arterial parameters
+variable_name,units,value,data_reference
+R_aortic_root,Js_per_m6,1000000,to_be_identified
+C_aortic_root,m6_per_J,0.000000012028,to_be_identified
+I_aortic_root,Js2_per_m6,10000,to_be_identified
+u_ext_aortic_root,J_per_m3,0,user_defined
+u_0_aortic_root,J_per_m3,13300,Mynard&Smolich_2015
+q_0_aortic_root,m3,6.94e-06,Mynard&Smolich_2015
+```
+</CodeGroup>
+
+### Parameter types explained
+
+- **R**: Resistance (flow resistance through vessel)
+- **C**: Compliance (vessel elasticity/distensibility)
+- **I**: Inertance (blood inertia effect)
+- **u_ext**: External pressure on vessel
+- **q**: Volume or flow rate
+- **E**: Elastance (stiffness, inverse of compliance)
+- **K_vo/K_vc**: Valve opening/closing coefficients
+- **A_nn**: Valve annulus area
+- **T**: Cardiac cycle period
+
+<Note>
+  Parameters marked `to_be_identified` are candidates for parameter identification (calibration) to match experimental data.
+</Note>
+
+## Running the model
+
+<Steps>
+  <Step title="Locate example files">
+    The example files are in your Circulatory Autogen installation:
+    
+    ```bash
+    cd [project_dir]/resources
+    ls 3compartment_*
+    ```
+    
+    You should see:
+    - `3compartment_vessel_array.csv`
+    - `3compartment_parameters.csv`
+  </Step>
+  
+  <Step title="Configure user inputs">
+    Edit `[project_dir]/user_run_files/user_inputs.yaml`:
+    
+    ```yaml
+    file_prefix: 3compartment
+    resources_dir: [project_dir]/resources
+    generated_models_dir: [project_dir]/generated_models
+    model_type: cellml_only
+    ```
+  </Step>
+  
+  <Step title="Generate the model">
+    Run autogeneration:
+    
+    ```bash
+    cd [project_dir]/user_run_files
+    ./run_autogeneration.sh
+    ```
+    
+    The script will:
+    1. Read vessel array and parameters
+    2. Generate CellML modules
+    3. Create coupled model
+    4. Test the simulation
+    5. Report success or errors
+  </Step>
+  
+  <Step title="Open in OpenCOR">
+    1. Launch OpenCOR
+    2. Open `[project_dir]/generated_models/3compartment/3compartment.cellml`
+    3. Switch to **Simulation** tab
+  </Step>
+  
+  <Step title="Configure simulation settings">
+    Set these parameters:
+    
+    - **Starting point**: 0
+    - **Ending point**: 10 (ten cardiac cycles)
+    - **Point interval**: 0.01 (10 ms resolution)
+    - **Maximum step**: 0.01 (for stability)
+    
+    Solver settings (if needed):
+    - **Solver**: CVODE
+    - **Relative tolerance**: 1e-7
+    - **Absolute tolerance**: 1e-9
+  </Step>
+  
+  <Step title="Run and visualize">
+    Click the run button (▶) and plot these variables:
+    
+    - `v_aortic_root` - Aortic root flow rate
+    - `v_pvn` - Pulmonary vein flow rate  
+    - `q_total_heart` - Total heart volume
+    - `u_systemic_T` - Systemic pressure
+  </Step>
+</Steps>
+
+## Interpreting results
+
+Before calibration, you should see:
+
+- **Periodic oscillations**: Flow and pressure vary with cardiac cycle (period T = 1.0 s)
+- **Aortic flow**: Pulsatile, peaks during systole
+- **Pulmonary vein flow**: More continuous with smaller pulsations
+- **Heart volume**: Cyclical changes as chambers fill and empty
+
+<Note>
+  Initial results may not match physiological values exactly. This is expected before parameter identification. See [Parameter Identification](/param-id/overview) to calibrate the model.
+</Note>
+
+## Key features demonstrated
+
+<CardGroup cols={2}>
+  <Card title="Multiple inputs/outputs" icon="arrows-split-up-and-left">
+    The heart module shows how to handle multiple input and output vessels
+  </Card>
+  
+  <Card title="Different BC types" icon="bezier-curve">
+    Examples of vp, vv, pp, and special boundary conditions
+  </Card>
+  
+  <Card title="Volume conservation" icon="balance-scale">
+    The volume_sum module demonstrates system-wide constraints
+  </Card>
+  
+  <Card title="Parameter organization" icon="list-check">
+    Shows proper parameter naming and reference documentation
+  </Card>
+</CardGroup>
+
+## Modifying the model
+
+Try these modifications to understand the model better:
+
+<AccordionGroup>
+  <Accordion title="Change cardiac cycle period">
+    In `3compartment_parameters.csv`, modify:
+    
+    ```csv
+    T,second,0.8,user_modified
+    ```
+    
+    This simulates a faster heart rate (75 bpm instead of 60 bpm). Re-run autogeneration and simulate.
+  </Accordion>
+  
+  <Accordion title="Adjust systemic resistance">
+    Increase systemic resistance to simulate hypertension:
+    
+    ```csv
+    R_T_systemic_T,Js_per_m6,150000000,user_modified
+    ```
+    
+    This increases afterload on the left ventricle.
+  </Accordion>
+  
+  <Accordion title="Modify vessel compliance">
+    Change aortic compliance:
+    
+    ```csv
+    C_aortic_root,m6_per_J,0.000000020000,user_modified
+    ```
+    
+    This simulates a more compliant (younger/healthier) aorta.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Custom Modules" icon="puzzle-piece" href="/tutorials/custom-modules">
+    Create your own vessel types and CellML modules
+  </Card>
+  
+  <Card title="Parameter Identification" icon="bullseye" href="/param-id/overview">
+    Calibrate this model to match experimental data
+  </Card>
+  
+  <Card title="Sensitivity Analysis" icon="chart-line" href="/analysis/sensitivity-analysis">
+    Identify which parameters most affect model outputs
+  </Card>
+  
+  <Card title="Design Models" icon="pen-ruler" href="/tutorials/basic-model">
+    Learn advanced model design techniques
+  </Card>
+</CardGroup>

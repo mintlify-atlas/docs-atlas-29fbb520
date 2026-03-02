@@ -1,0 +1,272 @@
+---
+title: 'Myokit Solver Helper'
+description: 'Wrapper for running CellML models using the Myokit CVODE solver'
+---
+
+## MyokitSimHelper
+
+Myokit-based solver wrapper that matches the OpenCOR SimulationHelper interface.
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:15`
+
+### Constructor
+
+```python
+SimulationHelper(cellml_path, dt, sim_time, solver_info=None, pre_time=0.0)
+```
+
+<ParamField path="cellml_path" type="str" required>
+  Path to the CellML model file
+</ParamField>
+
+<ParamField path="dt" type="float" required>
+  Time step for data storage
+</ParamField>
+
+<ParamField path="sim_time" type="float" required>
+  Simulation duration (excluding pre-time)
+</ParamField>
+
+<ParamField path="solver_info" type="dict" default="None">
+  Solver configuration. Supported keys:
+  - `MaximumStep`: Mapped to `Simulation.set_max_step_size()`
+  - `rtol`: Relative tolerance (default: 1e-8)
+  - `atol`: Absolute tolerance (default: 1e-8)
+  - `method`: Ignored (kept for compatibility with other helpers)
+</ParamField>
+
+<ParamField path="pre_time" type="float" default="0.0">
+  Pre-simulation time for steady state
+</ParamField>
+
+### Methods
+
+#### run
+
+```python
+run() -> bool
+```
+
+Executes the simulation using Myokit's CVODE solver.
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:535`
+
+<ResponseField name="return" type="bool">
+  True if simulation succeeded, False if failed
+</ResponseField>
+
+#### get_results
+
+```python
+get_results(variables_list_of_lists, flatten=False) -> List
+```
+
+Retrieves simulation results for specified variables.
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:569`
+
+<ParamField path="variables_list_of_lists" type="List[List[str]]" required>
+  Variable names to retrieve. Can be nested lists or flat list.
+</ParamField>
+
+<ParamField path="flatten" type="bool" default="False">
+  Whether to flatten the result structure
+</ParamField>
+
+<ResponseField name="return" type="List">
+  Nested list of numpy arrays (flattened if requested)
+</ResponseField>
+
+#### get_all_results
+
+```python
+get_all_results(flatten=False) -> List
+```
+
+Retrieves results for all loggable variables.
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:566`
+
+#### get_all_variable_names
+
+```python
+get_all_variable_names() -> List[str]
+```
+
+Returns names of all loggable variables (excluding constants).
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:558`
+
+#### get_init_param_vals
+
+```python
+get_init_param_vals(param_names) -> List
+```
+
+Retrieves initial parameter values.
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:585`
+
+<ParamField path="param_names" type="List[Union[str, List[str]]]" required>
+  Parameter names to retrieve
+</ParamField>
+
+#### set_param_vals
+
+```python
+set_param_vals(param_names, param_vals) -> None
+```
+
+Sets parameter values. For state variables, sets the state value. For other variables, sets the RHS to a constant.
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:605`
+
+<ParamField path="param_names" type="List[Union[str, List[str]]]" required>
+  Parameter names to set
+</ParamField>
+
+<ParamField path="param_vals" type="List[float]" required>
+  Values to set
+</ParamField>
+
+#### update_times
+
+```python
+update_times(dt, start_time, sim_time, pre_time) -> None
+```
+
+Updates simulation timing parameters.
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:640`
+
+<ParamField path="dt" type="float" required>
+  Time step for output
+</ParamField>
+
+<ParamField path="start_time" type="float" required>
+  Start time
+</ParamField>
+
+<ParamField path="sim_time" type="float" required>
+  Simulation duration
+</ParamField>
+
+<ParamField path="pre_time" type="float" required>
+  Pre-simulation duration
+</ParamField>
+
+#### reset_and_clear
+
+```python
+reset_and_clear(only_one_exp=-1) -> None
+```
+
+Resets the simulation and clears the log.
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:550`
+
+#### reset_states
+
+```python
+reset_states() -> None
+```
+
+Resets only state variables.
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:554`
+
+#### close_simulation
+
+```python
+close_simulation() -> None
+```
+
+No-op for Myokit (no explicit close required).
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:645`
+
+#### get_time
+
+```python
+get_time(include_pre_time=False) -> np.ndarray
+```
+
+Returns the time vector.
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:59`
+
+<ParamField path="include_pre_time" type="bool" default="False">
+  Whether to include pre-time in the returned array
+</ParamField>
+
+### Special Features
+
+#### CellML Preprocessing
+
+Myokit helper includes automatic CellML preprocessing:
+
+- **Model Flattening**: Uses libCellML to flatten models and resolve imports
+- **Connection Resolution**: Properly handles variable connections across components  
+- **Initial Value Expressions**: Preserves dependency of state initial values on constants
+- **MathML Fixes**: Converts `max(x, 0)` functions to piecewise expressions for Myokit compatibility
+
+Location: `~/workspace/source/src/solver_wrappers/myokit_helper.py:156`
+
+### Attributes
+
+<ResponseField name="cellml_path" type="str">
+  Path to the original CellML file
+</ResponseField>
+
+<ResponseField name="processed_cellml_path" type="str">
+  Path to the preprocessed temporary CellML file
+</ResponseField>
+
+<ResponseField name="model" type="myokit.Model">
+  Myokit model object
+</ResponseField>
+
+<ResponseField name="simulation" type="myokit.Simulation">
+  Myokit simulation object
+</ResponseField>
+
+<ResponseField name="last_log" type="dict">
+  Last simulation log with variable trajectories
+</ResponseField>
+
+<ResponseField name="tSim" type="np.ndarray">
+  Time vector for stored results
+</ResponseField>
+
+### Example
+
+```python
+from solver_wrappers.myokit_helper import SimulationHelper
+
+# Configure Myokit solver
+solver_info = {
+    'MaximumStep': 0.001,
+    'rtol': 1e-7,
+    'atol': 1e-9
+}
+
+# Create simulation helper
+sim = SimulationHelper(
+    cellml_path='model.cellml',
+    dt=0.01,
+    sim_time=10.0,
+    solver_info=solver_info,
+    pre_time=5.0
+)
+
+# Set parameters
+sim.set_param_vals(['parameters.R_sys'], [1.2])
+
+# Run simulation
+if sim.run():
+    results = sim.get_results([['time', 'P_lv', 'V_lv']])
+    time = results[0][0]
+    pressure = results[0][1]
+
+sim.close_simulation()
+```

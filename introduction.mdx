@@ -1,0 +1,115 @@
+---
+title: Introduction
+description: Automated generation and calibration of CellML circulatory system models from modular components
+---
+
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.svg"
+  alt="Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.svg"
+  alt="Hero Dark"
+/>
+
+## What is Circulatory Autogen?
+
+Circulatory Autogen automates combining CellML modules into a system model, then calibrating the model to experimental or clinical data.
+
+Common use cases include coupled biochemical cell models, neuron-cardiomyocyte models, and patient-specific 0D blood flow networks.
+
+## Why Circulatory Autogen?
+
+<CardGroup cols={2}>
+  <Card title="Module Reusability" icon="puzzle-piece">
+    Easily couple CellML modules from a wide range of openly available sources. Build system models from reusable components instead of monolithic code.
+  </Card>
+  <Card title="Parameter Calibration" icon="sliders">
+    Built-in parameter identification algorithms to calibrate model parameters to clinical or experimental data using multiple optimization methods.
+  </Card>
+  <Card title="Code Generation" icon="code">
+    Generate models in CellML, then re-generate in any language (C++, Fortran, Matlab) with libcellml for easy coupling with other model types.
+  </Card>
+  <Card title="Open Source" icon="unlock">
+    Completely open source under Apache 2.0 license. Use freely in academia and beyond, promoting reproducible science.
+  </Card>
+</CardGroup>
+
+## Key Features
+
+- **Automated CellML model generation** from modular vessel/component arrays
+- **Multi-algorithm parameter identification** including Genetic Algorithm, CMA-ES, and Bayesian Optimization
+- **MCMC-based uncertainty quantification** with emcee
+- **Sobol sensitivity analysis** and identifiability analysis
+- **MPI-parallel optimization** on HPC systems
+- **Multi-target code generation** to CellML, C++, and Python
+- **OpenCOR and Myokit solver integration**
+- **Custom module framework** for extensibility
+
+## What Can Circulatory Autogen Do?
+
+### 1. Model Autogeneration
+
+Generate a system model by combining CellML modules in a user-defined network arrangement. Define your vessel array and parameters, then automatically generate coupled models.
+
+### 2. Parameter Identification
+
+Calibrate model parameters to experimental or clinical data using advanced optimization algorithms:
+
+- Genetic algorithms
+- CMA-ES (Covariance Matrix Adaptation Evolution Strategy)
+- Bayesian optimization
+- MCMC for uncertainty quantification
+
+### 3. Sensitivity and Identifiability Analysis
+
+Evaluate parameter influence and uncertainty with:
+
+- Sobol sensitivity analysis
+- Identifiability analysis using Laplace approximation or profile likelihood
+
+## Get Started
+
+<CardGroup cols={3}>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Set up OpenCOR and install Circulatory Autogen dependencies
+  </Card>
+  <Card
+    title="Quickstart"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Generate your first 3-compartment circulatory model
+  </Card>
+  <Card
+    title="Tutorials"
+    icon="book-open"
+    href="/tutorials/basic-model"
+  >
+    Learn through step-by-step examples
+  </Card>
+</CardGroup>
+
+## Use Cases
+
+Circulatory Autogen is designed for researchers and engineers working on:
+
+- **Cardiovascular system modeling** - Build patient-specific 0D blood flow networks
+- **Coupled cell models** - Combine biochemical and electrophysiological modules
+- **Multi-scale modeling** - Connect cellular models to tissue and organ-level systems
+- **Parameter estimation** - Calibrate models to clinical measurements
+- **Uncertainty quantification** - Assess confidence in model predictions
+
+## Community and Support
+
+Circulatory Autogen is an open-source project maintained by the physiome research community.
+
+<Card title="View on GitHub" icon="github" href="https://github.com/FinbarArgus/circulatory_autogen">
+  Explore the source code, report issues, and contribute to development
+</Card>

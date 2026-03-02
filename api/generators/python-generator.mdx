@@ -1,0 +1,274 @@
+---
+title: PythonGenerator
+description: Generate Python modules from CellML models using libCellML
+---
+
+## Overview
+
+The `PythonGenerator` class provides a simple interface to generate executable Python code from CellML models. It handles parsing, import resolution, model analysis, and code generation using libCellML.
+
+**Source:** `~/workspace/source/src/generators/PythonGenerator.py`
+
+## Class: PythonGenerator
+
+### Constructor
+
+```python
+PythonGenerator(
+    cellml_path: str,
+    output_dir: Optional[str] = None,
+    module_name: Optional[str] = None
+)
+```
+
+Initializes the Python generator for a CellML model file.
+
+<ParamField path="cellml_path" type="str" required>
+  Path to the CellML model file to generate Python code from
+</ParamField>
+
+<ParamField path="output_dir" type="str">
+  Directory where the Python module will be saved. Defaults to the directory containing the CellML file
+</ParamField>
+
+<ParamField path="module_name" type="str">
+  Name of the generated Python module (without .py extension). Defaults to the CellML filename stem
+</ParamField>
+
+**Example:**
+
+```python
+from generators.PythonGenerator import PythonGenerator
+
+# Using defaults (output to same directory as CellML file)
+gen = PythonGenerator('model.cellml')
+
+# Custom output directory and module name
+gen = PythonGenerator(
+    cellml_path='./cellml/cardiovascular_model.cellml',
+    output_dir='./python_models',
+    module_name='cvs_model'
+)
+```
+
+### Methods
+
+#### generate()
+
+```python
+generate() -> str
+```
+
+Generates Python code from the CellML model and validates it by running a test simulation.
+
+**Returns:** `str` - Path to the generated Python file
+
+**Raises:**
+- `ValueError` - If CellML parsing fails
+- `ValueError` - If the model is not a valid ODE model
+- `ValueError` - If generated code is empty
+- `ValueError` - If test simulation fails
+
+**Process:**
+1. Parses the CellML file using libCellML parser (non-strict mode for CellML 1.1 compatibility)
+2. Resolves imports and flattens the model
+3. Analyses the model to ensure it's a valid ODE model
+4. Generates Python code using libCellML's Python profile
+5. Saves the code to `{module_name}.py`
+6. Runs a test simulation (0.00001 seconds) to validate the generated code
+7. Returns the path to the generated file if successful
+
+**Example:**
+
+```python
+gen = PythonGenerator('cvs_model.cellml', output_dir='./generated')
+
+try:
+    output_path = gen.generate()
+    print(f"Successfully generated: {output_path}")
+except ValueError as e:
+    print(f"Generation failed: {e}")
+```
+
+**Output:**
+```
+Model generation has been successful.
+```
+
+**Generated File Structure:**
+
+The generated Python module contains:
+- State variable declarations
+- Parameter constants
+- ODE system functions
+- Integration utilities
+- Helper functions for simulation
+
+## Private Methods
+
+### _parse_model()
+
+```python
+_parse_model() -> libcellml.Model
+```
+
+Parses the CellML file using libCellML's non-strict parser to support CellML 1.1 models.
+
+**Returns:** Parsed libCellML Model object
+
+**Raises:** `ValueError` if parsing errors occur
+
+### _resolve_and_flatten()
+
+```python
+_resolve_and_flatten(model: libcellml.Model) -> libcellml.Model
+```
+
+Resolves imports and flattens the model into a single model representation.
+
+<ParamField path="model" type="libcellml.Model" required>
+  The parsed CellML model
+</ParamField>
+
+**Returns:** Flattened libCellML Model
+
+**Behavior:**
+- Prefers project helper utilities for CellML 1.1 tolerance if available
+- Falls back to libCellML's built-in importer
+- Resolves imports relative to the CellML file's directory
+
+### _analyse()
+
+```python
+_analyse(flat_model: libcellml.Model) -> libcellml.AnalyserModel
+```
+
+Analyses the flattened model to ensure it's a valid ODE model.
+
+<ParamField path="flat_model" type="libcellml.Model" required>
+  The flattened CellML model
+</ParamField>
+
+**Returns:** Analysed model from libCellML Analyser
+
+**Raises:** `ValueError` if the model is not a valid ODE model
+
+**Validation:**
+- Prints any analysis issues using `libcellml_utilities.print_issues()`
+- Ensures model type is `ODE` (not `DAE`, `ALGEBRAIC`, etc.)
+
+## Properties
+
+<ParamField path="cellml_path" type="str">
+  Path to the input CellML file
+</ParamField>
+
+<ParamField path="output_dir" type="str">
+  Directory for the generated Python module
+</ParamField>
+
+<ParamField path="module_name" type="str">
+  Name of the generated Python module (without extension)
+</ParamField>
+
+## Usage Example
+
+### Complete Generation Workflow
+
+```python
+from generators.PythonGenerator import PythonGenerator
+import os
+
+# Generate Python code from CellML
+gen = PythonGenerator(
+    cellml_path='./models/cvs_0d.cellml',
+    output_dir='./python_output',
+    module_name='cvs_python_model'
+)
+
+try:
+    output_file = gen.generate()
+    print(f"Generated Python model: {output_file}")
+    
+    # Now you can import and use the generated module
+    import sys
+    sys.path.insert(0, './python_output')
+    import cvs_python_model
+    
+    # Use the generated model for simulation
+    # (see solver_wrappers.python_solver_helper for simulation utilities)
+    
+except ValueError as e:
+    print(f"Error during generation: {e}")
+```
+
+### Integration with Simulation Helper
+
+The generator automatically validates the code using `PythonSimulationHelper`:
+
+```python
+from solver_wrappers.python_solver_helper import SimulationHelper
+
+# After generation, run a full simulation
+gen = PythonGenerator('model.cellml')
+py_file = gen.generate()
+
+# Custom simulation
+sim = SimulationHelper(py_file, dt=0.001, sim_time=10.0)
+sim.set_solve_ivp_method('BDF')  # Backward differentiation formula
+results = sim.run()
+```
+
+## Error Handling
+
+The generator performs comprehensive validation:
+
+1. **Parse Errors**: Reports all CellML syntax errors with descriptions
+2. **Model Type Validation**: Ensures the model is an ODE system
+3. **Code Generation Validation**: Checks generated code is not empty
+4. **Runtime Validation**: Runs a test simulation to ensure the code executes
+
+**Common Errors:**
+
+```python
+# Parse error
+ValueError: CellML parse errors:
+Undefined units 'metre' in variable 'length'
+
+# Invalid model type
+ValueError: Generated model is not a valid ODE model according to libcellml
+
+# Empty generation
+ValueError: Generated Python code is empty. Model invalid
+
+# Simulation failure
+ValueError: Model generation has failed. Or the simulation fails when trying 
+to simulate for 0.00001 seconds in Python
+```
+
+## Dependencies
+
+**Required:**
+- `libcellml` - For CellML parsing, analysis, and code generation
+- `solver_wrappers.python_solver_helper` - For test simulation
+
+**Optional:**
+- `utilities.libcellml_helper_funcs` - Enhanced import resolution for CellML 1.1
+- `utilities.libcellml_utilities` - Issue reporting utilities
+
+## CellML Compatibility
+
+- **CellML 2.0**: Full support
+- **CellML 1.1**: Supported via non-strict parsing mode
+- **Imports**: Automatically resolved relative to the model file location
+- **Units**: Custom and built-in units supported
+- **Variables**: State variables, computed constants, and algebraic variables
+
+## Notes
+
+- The generator uses libCellML's built-in Python profile for code generation
+- Non-strict parsing mode allows legacy CellML 1.1 models to be processed
+- Test simulation uses BDF (Backward Differentiation Formula) solver
+- Generated code includes all necessary imports and helper functions
+- The validation simulation runs for only 0.00001 seconds to quickly verify correctness
+- For CellML 1.1 models, some benign errors during import resolution are tolerated

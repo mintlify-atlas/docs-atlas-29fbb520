@@ -1,0 +1,247 @@
+---
+title: "Sensitivity Analysis"
+description: "Perform global sensitivity analysis using Sobol indices"
+---
+
+The `SensitivityAnalysis` class provides tools for conducting global sensitivity analysis on models using Sobol indices and other methods.
+
+## Class: SensitivityAnalysis
+
+A class for performing sensitivity analysis on 0D models to identify which parameters have the most impact on model outputs.
+
+### Constructor
+
+```python
+SensitivityAnalysis(
+    model_path, 
+    model_type, 
+    file_name_prefix, 
+    sa_options, 
+    DEBUG=False,
+    param_id_output_dir=None, 
+    resources_dir=None, 
+    model_out_names=[], 
+    solver_info={}, 
+    dt=0.01, 
+    optimiser_options={}, 
+    param_id_obs_path=None, 
+    params_for_id_path=None
+)
+```
+
+<ParamField path="model_path" type="str" required>
+  Path to the model file
+</ParamField>
+
+<ParamField path="model_type" type="str" required>
+  Type of model (e.g., 'CellML', 'python')
+</ParamField>
+
+<ParamField path="file_name_prefix" type="str" required>
+  Prefix for output files
+</ParamField>
+
+<ParamField path="sa_options" type="dict" required>
+  Dictionary containing sensitivity analysis options including:
+  - `method`: 'naive' or 'sobol'
+  - `output_dir`: Directory for saving results
+</ParamField>
+
+<ParamField path="DEBUG" type="bool" default="False">
+  Enable debug mode
+</ParamField>
+
+<ParamField path="param_id_output_dir" type="str" default="None">
+  Directory for parameter identification outputs
+</ParamField>
+
+<ParamField path="resources_dir" type="str" default="None">
+  Directory containing resource files
+</ParamField>
+
+<ParamField path="model_out_names" type="list" default="[]">
+  List of model output variable names
+</ParamField>
+
+<ParamField path="solver_info" type="dict" default="{}">
+  Dictionary containing solver configuration
+</ParamField>
+
+<ParamField path="dt" type="float" default="0.01">
+  Time step for simulations
+</ParamField>
+
+<ParamField path="optimiser_options" type="dict" default="{}">
+  Options for optimization algorithms
+</ParamField>
+
+<ParamField path="param_id_obs_path" type="str" default="None">
+  Path to observation data for parameter identification
+</ParamField>
+
+<ParamField path="params_for_id_path" type="str" default="None">
+  Path to parameter configuration file
+</ParamField>
+
+### Class Methods
+
+#### init_from_dict
+
+```python
+@classmethod
+init_from_dict(cls, inp_data_dict)
+```
+
+Alternative constructor that initializes from a configuration dictionary.
+
+<ParamField path="inp_data_dict" type="dict" required>
+  Dictionary containing all initialization parameters
+</ParamField>
+
+**Returns:** `SensitivityAnalysis` - New instance initialized from the dictionary
+
+## Instance Methods
+
+### add_user_operation_func
+
+```python
+add_user_operation_func(func)
+```
+
+Add a user-defined operation function for custom sensitivity metrics.
+
+<ParamField path="func" type="callable" required>
+  Custom function to apply to model outputs
+</ParamField>
+
+### set_sa_options
+
+```python
+set_sa_options(sa_options)
+```
+
+Update sensitivity analysis options.
+
+<ParamField path="sa_options" type="dict" required>
+  New sensitivity analysis options
+</ParamField>
+
+### set_ground_truth_data
+
+```python
+set_ground_truth_data(obs_data_dict)
+```
+
+Set the ground truth observation data for sensitivity analysis.
+
+<ParamField path="obs_data_dict" type="dict" required>
+  Observation data dictionary
+</ParamField>
+
+### set_params_for_id
+
+```python
+set_params_for_id(params_for_id_dict)
+```
+
+Set the parameters to be used in sensitivity analysis.
+
+<ParamField path="params_for_id_dict" type="dict" required>
+  Dictionary defining parameters and their ranges
+</ParamField>
+
+### set_model_out_names
+
+```python
+set_model_out_names(obs_data_dict)
+```
+
+Extract and set model output names from observation data.
+
+<ParamField path="obs_data_dict" type="dict" required>
+  Observation data dictionary containing data_items
+</ParamField>
+
+**Notes:**
+- Currently only supports single operand per data item
+- Exits with error if multiple operands are found
+
+### run_sensitivity_analysis
+
+```python
+run_sensitivity_analysis(sa_options=None)
+```
+
+Run the sensitivity analysis using the configured method.
+
+<ParamField path="sa_options" type="dict" default="None">
+  Optional sensitivity analysis options to override current settings
+</ParamField>
+
+**Notes:**
+- Dispatches to either `run_naive_sensitivity` or `run_sobol_sensitivity` based on method
+- Exits with error if method is not recognized
+
+### run_sobol_sensitivity
+
+```python
+run_sobol_sensitivity(sa_options=None)
+```
+
+Run Sobol global sensitivity analysis.
+
+<ParamField path="sa_options" type="dict" default="None">
+  Optional sensitivity analysis options
+</ParamField>
+
+**Returns:** Saves results to disk including:
+- First-order Sobol indices (S1)
+- Total-effect Sobol indices (ST)
+- Second-order Sobol indices (S2)
+- Plots and visualizations
+
+**Notes:**
+- Requires ground truth data and params_for_id to be set
+- Runs in parallel using MPI
+- Only rank 0 saves results and generates plots
+
+### choose_most_impactful_params_sobol
+
+```python
+choose_most_impactful_params_sobol(
+    top_n=5, 
+    index_type='ST', 
+    criterion='max', 
+    threshold=0.01, 
+    use_threshold=False
+)
+```
+
+Ranks and selects the most impactful parameters based on Sobol indices.
+
+<ParamField path="top_n" type="int" default="5">
+  Maximum number of parameters to return
+</ParamField>
+
+<ParamField path="index_type" type="str" default="'ST'">
+  Which Sobol index to use: 'ST' (total-effect) or 'S1' (first-order)
+</ParamField>
+
+<ParamField path="criterion" type="str or callable" default="'max'">
+  Ranking criterion: 'max', 'mean', or a custom function
+</ParamField>
+
+<ParamField path="threshold" type="float" default="0.01">
+  Minimum score required for parameter selection
+</ParamField>
+
+<ParamField path="use_threshold" type="bool" default="False">
+  Whether to filter parameters below the threshold
+</ParamField>
+
+**Returns:** `list` - List of parameter names ranked by impact (empty list on non-zero ranks)
+
+**Notes:**
+- Only returns results on MPI rank 0, None on other ranks
+- Prints ranked parameters with their scores
+- Returns empty list if no parameters meet criteria

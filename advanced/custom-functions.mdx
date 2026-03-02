@@ -1,0 +1,392 @@
+---
+title: Custom Functions
+description: Create custom operation and cost functions to extend Circulatory Autogen's capabilities
+---
+
+## Overview
+
+Circulatory Autogen allows you to define custom functions in the `funcs_user/` directory to:
+
+- **Operation functions** - Transform simulation outputs (e.g., calculate derived metrics)
+- **Cost functions** - Define custom objective functions for parameter identification
+- **Cost combiners** - Specify how multiple costs are combined
+
+These functions integrate seamlessly with the parameter identification and sensitivity analysis workflows.
+
+## Operation Functions
+
+Operation functions process simulation outputs to compute derived quantities. They're defined in `funcs_user/operation_funcs_user.py`.
+
+### Basic Structure
+
+```python funcs_user/operation_funcs_user.py
+def ml_to_m3(x):
+    return x*1e-6
+```
+
+### Series-to-Constant Functions
+
+Use the `@series_to_constant` decorator for functions that reduce time series to single values:
+
+```python funcs_user/operation_funcs_user.py
+from scipy.signal import find_peaks
+
+@series_to_constant
+def steady_state_avg(x, series_output=False):
+    """
+    finds the average of the second half of this subexperiment. 
+    The aim of this is to allow the dynamics to reach steady state
+    or periodic steady state before getting the average
+    """
+    if series_output:
+        return x
+    else:
+        return np.mean(x[len(x)//2:])
+```
+
+The `series_output` parameter controls whether to return:
+- `True` - Full series (for plotting)
+- `False` - Reduced constant value (for fitting)
+
+### Peak Detection Functions
+
+Calculate metrics from periodic signals:
+
+```python funcs_user/operation_funcs_user.py
+@series_to_constant
+def calc_spike_period(t, V, series_output=False):
+    if series_output:
+        return V
+    peak_idxs, peak_properties = find_peaks(V)
+    if len(peak_idxs) < 2:
+        period = t[-1] - t[0]
+    else:
+        period = np.sum([t[peak_idxs[II+1]] - t[peak_idxs[II]] 
+                        for II in range(len(peak_idxs)-1)])/(len(peak_idxs) - 1)
+    return period
+```
+
+### Windowed Analysis
+
+Analyze specific portions of the simulation:
+
+```python funcs_user/operation_funcs_user.py
+@series_to_constant
+def mean_in_range(x, start_frac=0.0, end_frac=1.0, series_output=False):
+    if series_output:
+        return x
+    else:
+        start_idx = int(start_frac*(len(x)-1))
+        end_idx = int(end_frac*(len(x)-1))
+        range_values = x[start_idx:end_idx]
+        return np.mean(range_values)
+```
+
+**Usage in obs_data.json:**
+
+```json
+{
+  "operation_func": "mean_in_range",
+  "operation_func_kwargs": {
+    "start_frac": 0.8,
+    "end_frac": 1.0
+  }
+}
+```
+
+### Advanced: Multi-Variable Functions
+
+Combine multiple signals:
+
+```python funcs_user/operation_funcs_user.py
+def first_minus_second_over_third_in_range(first, second, third):
+    if np.isscalar(first) and np.isscalar(second) and np.isscalar(third):
+        return (first - second) / third
+    return (np.asarray(first) - np.asarray(second)) / np.asarray(third)
+```
+
+### Cardiac-Specific Functions
+
+**E/A Ratio** (diastolic function indicator):
+
+```python funcs_user/operation_funcs_user.py
+@series_to_constant
+def E_A_ratio(t, x, T, series_output=False):
+    if series_output:
+        return x
+    peak_idxs, peak_properties = find_peaks(x)
+    if len(peak_idxs) < 1:
+        return 100
+    elif len(peak_idxs) < 2:
+        return 10
+    if np.isscalar(T):
+        pass
+    else:
+        T = np.mean(T)
+
+    if (t[peak_idxs[1]] - t[peak_idxs[0]] > 0.7* T) :
+        return 10
+
+    E_A_ratio = x[peak_idxs[0]]/x[peak_idxs[1]]
+    return E_A_ratio
+```
+
+## Cost Functions
+
+Cost functions quantify the difference between model outputs and observations. Define them in `funcs_user/cost_funcs_user.py`.
+
+### Basic Cost Function
+
+```python funcs_user/cost_funcs_user.py
+def MSE(*args, **kwargs):
+    # The mean squared error cost is the same as the gaussian_MLE
+    return gaussian_MLE(*args, **kwargs)
+```
+
+### Gaussian Maximum Likelihood
+
+The default cost function:
+
+```python funcs_user/cost_funcs_user.py
+@is_MLE
+def gaussian_MLE(output, desired_mean, std, weight):
+    cost = np.power((output - desired_mean)/std, 2)*weight
+    if hasattr(output, '__len__'):
+        # if entry is a vector then turn the vector of costs for each data point into a average cost
+        cost = np.sum(cost)/len(output)
+    
+    return cost
+```
+
+**Usage in obs_data.json:**
+
+```json
+{
+  "cost_type": "MSE",
+  "ground_truth": 80,
+  "std": 5,
+  "weight": 1.0
+}
+```
+
+### Multimodal Distributions
+
+For observations with multiple possible values:
+
+```python funcs_user/cost_funcs_user.py
+@is_MLE
+def multimodal_gaussian(output, prob_dist_params, weight):
+    if hasattr(output, '__len__'):
+        print("ERROR: multimodal_gaussian cost function is not implemented for series data")
+    
+    v_vec = np.zeros(len(prob_dist_params["means"]))
+    for idx, (desired_mean, std, scale) in enumerate(zip(prob_dist_params["means"], 
+                                                          prob_dist_params["stds"], 
+                                                          prob_dist_params["scales"])):
+        v_vec[idx] = np.power((output - desired_mean)/std, 2)*scale
+    
+    v_max = np.max(v_vec)
+    sum_inner_term = np.sum(np.exp(v_vec - v_max))
+    cost = (v_max + np.log(sum_inner_term))*weight
+    
+    return cost
+```
+
+**Usage in obs_data.json:**
+
+```json
+{
+  "cost_type": "multimodal_gaussian",
+  "prob_dist_params": {
+    "means": [80, 120],
+    "stds": [5, 5],
+    "scales": [0.6, 0.4]
+  },
+  "weight": 1.0
+}
+```
+
+### Absolute Error Cost
+
+Less sensitive to outliers:
+
+```python funcs_user/cost_funcs_user.py
+def AE(output, desired_mean, std, weight):
+    cost = np.abs((output - desired_mean)/std)*weight
+    if hasattr(output, '__len__'):
+        cost = np.sum(cost)/len(output)
+    return cost
+```
+
+### Decorators
+
+**Mark as MLE** (affects uncertainty quantification):
+
+```python
+@is_MLE
+def my_cost_function(output, ground_truth, std, weight):
+    # ...
+```
+
+## Cost Combiners
+
+Combine multiple cost terms into a single objective.
+
+### Additive (Sum)
+
+```python funcs_user/cost_funcs_user.py
+@is_MLE
+@cost_combiner
+def additive(costs):
+    cost = np.sum(costs)
+    return cost
+```
+
+### Normalized Additive (Mean)
+
+```python funcs_user/cost_funcs_user.py
+@cost_combiner
+def norm_additive(costs):
+    cost = np.sum(costs)/len(costs)
+    return cost
+```
+
+**Usage in user_inputs.yaml:**
+
+```yaml
+optimiser_options:
+  cost_type: MSE  # Individual cost function
+  # Cost combiner is automatically selected based on cost_type
+```
+
+## Example: Custom Hemodynamic Function
+
+Calculate pulse pressure variation (PPV):
+
+```python funcs_user/operation_funcs_user.py
+@series_to_constant
+def pulse_pressure_variation(t, pressure, series_output=False):
+    """
+    Calculate pulse pressure variation as a percentage.
+    PPV = 100 × (PPmax - PPmin) / PPmean
+    where PP = systolic - diastolic pressure
+    """
+    if series_output:
+        return pressure
+    
+    # Find peaks (systolic) and troughs (diastolic)
+    peak_idxs, _ = find_peaks(pressure)
+    trough_idxs, _ = find_peaks(-pressure)
+    
+    if len(peak_idxs) < 2 or len(trough_idxs) < 2:
+        return np.nan
+    
+    # Calculate pulse pressures
+    pulse_pressures = []
+    for i in range(min(len(peak_idxs), len(trough_idxs))):
+        pp = pressure[peak_idxs[i]] - pressure[trough_idxs[i]]
+        pulse_pressures.append(pp)
+    
+    if len(pulse_pressures) < 2:
+        return np.nan
+    
+    pp_max = np.max(pulse_pressures)
+    pp_min = np.min(pulse_pressures)
+    pp_mean = np.mean(pulse_pressures)
+    
+    ppv = 100 * (pp_max - pp_min) / pp_mean
+    return ppv
+```
+
+**Use in obs_data.json:**
+
+```json
+{
+  "name": "PPV",
+  "type": "series",
+  "variable": "heart/P_lv",
+  "operation_func": "pulse_pressure_variation",
+  "ground_truth": 12.0,
+  "std": 2.0,
+  "cost_type": "MSE"
+}
+```
+
+## Example: Custom Frequency-Domain Cost
+
+Fit in frequency domain:
+
+```python funcs_user/cost_funcs_user.py
+import numpy as np
+from scipy.fft import fft, fftfreq
+
+def spectral_MSE(output, desired_spectrum, std, weight):
+    """
+    Compare power spectra instead of time series.
+    """
+    # Compute FFT
+    output_fft = np.abs(fft(output))
+    
+    # Only use first half (real signal symmetry)
+    n = len(output_fft) // 2
+    output_spectrum = output_fft[:n]
+    
+    # Ensure same length
+    min_len = min(len(output_spectrum), len(desired_spectrum))
+    
+    # MSE in frequency domain
+    cost = np.power((output_spectrum[:min_len] - desired_spectrum[:min_len])/std, 2) * weight
+    return np.mean(cost)
+```
+
+## Best Practices
+
+### Operation Functions
+
+1. **Always handle edge cases** - Empty arrays, insufficient data points
+2. **Use series_output parameter** - Enables plotting alongside observations
+3. **Document assumptions** - E.g., which peak is systolic vs. diastolic
+4. **Test independently** - Verify with synthetic data before using in optimization
+
+### Cost Functions
+
+1. **Support both scalars and arrays** - Check with `hasattr(output, '__len__')`
+2. **Normalize by data length** - Divide by `len(output)` for vectors
+3. **Handle NaN/Inf** - Return large but finite cost (e.g., 1e6)
+4. **Use decorators appropriately** - `@is_MLE` for likelihood-based costs
+
+### Performance
+
+1. **Vectorize operations** - Use NumPy array operations instead of loops
+2. **Cache expensive computations** - Avoid recalculating constants
+3. **Profile if slow** - Use `cProfile` to identify bottlenecks
+
+## Debugging Custom Functions
+
+Test your function independently:
+
+```python
+import numpy as np
+import sys
+sys.path.append('../src')  # Add to path
+from funcs_user.operation_funcs_user import my_custom_function
+
+# Create test data
+t = np.linspace(0, 1, 100)
+V = np.sin(2 * np.pi * t)
+
+# Test function
+result = my_custom_function(t, V)
+print(f"Result: {result}")
+
+# Test series output
+series_result = my_custom_function(t, V, series_output=True)
+print(f"Series length: {len(series_result)}")
+```
+
+## Next Steps
+
+- Use custom functions in [parameter identification](/param-id/overview)
+- Deploy to [HPC systems](/advanced/hpc-deployment) for large-scale optimization
+- Combine with [C++ models](/advanced/cpp-generation) for performance
+- Explore [sensitivity analysis](/analysis/sensitivity-analysis) with custom metrics

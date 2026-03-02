@@ -1,0 +1,278 @@
+---
+title: 'OpenCOR Solver Helper'
+description: 'Wrapper for running CellML models using the OpenCOR CVODE solver'
+---
+
+## OpencorSimHelper
+
+Simulation helper class for running CellML models using OpenCOR's CVODE solver.
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:19`
+
+### Constructor
+
+```python
+SimulationHelper(cellml_path, dt, sim_time, solver_info=None, pre_time=0.0)
+```
+
+<ParamField path="cellml_path" type="str" required>
+  Path to the CellML model file
+</ParamField>
+
+<ParamField path="dt" type="float" required>
+  Time step for data storage (simulation output interval)
+</ParamField>
+
+<ParamField path="sim_time" type="float" required>
+  Simulation time duration (excluding pre-time)
+</ParamField>
+
+<ParamField path="solver_info" type="dict" default="None">
+  CVODE solver configuration. Supported keys:
+  - `MaximumNumberOfSteps`: Maximum steps allowed (default: 5000)
+  - `MaximumStep`: Maximum step size (default: 0.0001)
+  - `method`, `solver`, `dt_solver`: Ignored (kept for compatibility)
+  
+  Any other keys are passed directly to OpenCOR's CVODE solver properties.
+</ParamField>
+
+<ParamField path="pre_time" type="float" default="0.0">
+  Pre-simulation time for reaching steady state (not stored in output)
+</ParamField>
+
+### Methods
+
+#### run
+
+```python
+run() -> bool
+```
+
+Executes the simulation.
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:115`
+
+<ResponseField name="return" type="bool">
+  True if simulation succeeded, False if convergence failed
+</ResponseField>
+
+#### get_results
+
+```python
+get_results(variables_list_of_lists, flatten=False) -> List
+```
+
+Retrieves simulation results for specified variables.
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:146`
+
+<ParamField path="variables_list_of_lists" type="List[List[str]]" required>
+  List of variable name lists to retrieve. If a flat list is provided, it will be converted to list of lists.
+  Use `'time'` to retrieve time values.
+</ParamField>
+
+<ParamField path="flatten" type="bool" default="False">
+  Whether to flatten the result structure into a single list
+</ParamField>
+
+<ResponseField name="return" type="List[List[np.ndarray]]">
+  Nested list structure containing numpy arrays with variable trajectories (flattened if `flatten=True`)
+</ResponseField>
+
+#### get_all_results
+
+```python
+get_all_results(flatten=False) -> List
+```
+
+Retrieves results for all model variables (states, algebraics, and constants).
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:141`
+
+<ParamField path="flatten" type="bool" default="False">
+  Whether to flatten the result structure
+</ParamField>
+
+#### get_all_variable_names
+
+```python
+get_all_variable_names() -> List[str]
+```
+
+Returns names of all variables in the model (states, algebraics, and constants).
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:134`
+
+#### get_init_param_vals
+
+```python
+get_init_param_vals(param_names) -> List
+```
+
+Retrieves initial values of specified parameters.
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:175`
+
+<ParamField path="param_names" type="List[Union[str, List[str]]]" required>
+  List of parameter names (or lists of names) to retrieve. Names can include prefixes like `"global/param_name"` which will be automatically resolved.
+</ParamField>
+
+<ResponseField name="return" type="List">
+  List of parameter values (or lists of values for nested input)
+</ResponseField>
+
+#### set_param_vals
+
+```python
+set_param_vals(param_names, param_vals) -> None
+```
+
+Sets parameter values in the model.
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:195`
+
+<ParamField path="param_names" type="List[Union[str, List[str]]]" required>
+  List of parameter names to set
+</ParamField>
+
+<ParamField path="param_vals" type="List[float]" required>
+  Corresponding values to set
+</ParamField>
+
+#### update_times
+
+```python
+update_times(dt, start_time, sim_time, pre_time) -> None
+```
+
+Updates simulation timing parameters.
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:236`
+
+<ParamField path="dt" type="float" required>
+  New time step for output
+</ParamField>
+
+<ParamField path="start_time" type="float" required>
+  Simulation start time
+</ParamField>
+
+<ParamField path="sim_time" type="float" required>
+  Simulation duration
+</ParamField>
+
+<ParamField path="pre_time" type="float" required>
+  Pre-simulation duration
+</ParamField>
+
+#### reset_and_clear
+
+```python
+reset_and_clear(only_one_exp=-1) -> None
+```
+
+Resets the simulation and clears all stored results.
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:126`
+
+#### reset_states
+
+```python
+reset_states() -> None
+```
+
+Resets only the state variables (not constants).
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:131`
+
+#### close_simulation
+
+```python
+close_simulation() -> None
+```
+
+Closes the OpenCOR simulation object.
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:245`
+
+#### get_time
+
+```python
+get_time(include_pre_time=False) -> np.ndarray
+```
+
+Returns the time vector for stored simulation results.
+
+Location: `~/workspace/source/src/solver_wrappers/opencor_helper.py:63`
+
+<ParamField path="include_pre_time" type="bool" default="False">
+  Whether to include pre-simulation time in the returned array
+</ParamField>
+
+### Attributes
+
+<ResponseField name="cellml_path" type="str">
+  Path to the CellML model file
+</ResponseField>
+
+<ResponseField name="dt" type="float">
+  Time step for output storage
+</ResponseField>
+
+<ResponseField name="stop_time" type="float">
+  Total simulation end time (pre_time + sim_time)
+</ResponseField>
+
+<ResponseField name="pre_steps" type="int">
+  Number of steps in pre-simulation phase
+</ResponseField>
+
+<ResponseField name="n_steps" type="int">
+  Number of steps in main simulation phase
+</ResponseField>
+
+<ResponseField name="tSim" type="np.ndarray">
+  Time vector for stored results (excludes pre-time)
+</ResponseField>
+
+<ResponseField name="simulation" type="opencor.Simulation">
+  OpenCOR simulation object
+</ResponseField>
+
+<ResponseField name="data" type="opencor.SimulationData">
+  OpenCOR simulation data accessor
+</ResponseField>
+
+### Example
+
+```python
+from solver_wrappers.opencor_helper import SimulationHelper
+
+# Configure solver
+solver_info = {
+    'MaximumStep': 0.001,
+    'MaximumNumberOfSteps': 10000
+}
+
+# Create simulation helper
+sim = SimulationHelper(
+    cellml_path='model.cellml',
+    dt=0.01,
+    sim_time=10.0,
+    solver_info=solver_info,
+    pre_time=5.0
+)
+
+# Set parameters
+sim.set_param_vals(['R_sys'], [1.2])
+
+# Run simulation
+if sim.run():
+    # Get results
+    results = sim.get_results([['time', 'P_lv', 'V_lv']])
+    time = results[0][0]
+    pressure = results[0][1]
+    volume = results[0][2]
+
+sim.close_simulation()
+```

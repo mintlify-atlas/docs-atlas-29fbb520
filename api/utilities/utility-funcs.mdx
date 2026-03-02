@@ -1,0 +1,241 @@
+---
+title: "Utility Functions"
+description: "General utility functions and classes for model analysis"
+---
+
+A collection of utility functions and classes for normalization, data processing, model manipulation, and Hessian calculation.
+
+## Class: Normalise_class
+
+Provides normalization and unnormalization of parameter values.
+
+### Constructor
+
+```python
+Normalise_class(param_mins, param_maxs, mod_first_variables=0, modVal=1.0)
+```
+
+<ParamField path="param_mins" type="numpy.ndarray" required>
+  Minimum values for each parameter
+</ParamField>
+
+<ParamField path="param_maxs" type="numpy.ndarray" required>
+  Maximum values for each parameter
+</ParamField>
+
+<ParamField path="mod_first_variables" type="int" default="0">
+  Number of first variables to modify
+</ParamField>
+
+<ParamField path="modVal" type="float" default="1.0">
+  Modification value
+</ParamField>
+
+### Methods
+
+#### normalise
+
+```python
+normalise(x)
+```
+
+Normalizes parameter values to [0, 1] range.
+
+<ParamField path="x" type="numpy.ndarray" required>
+  Parameter values to normalize. Supports 1D, 2D, or 3D arrays
+</ParamField>
+
+**Returns:** `numpy.ndarray` - Normalized values in [0, 1] range
+
+#### unnormalise
+
+```python
+unnormalise(x)
+```
+
+Converts normalized values back to original parameter range.
+
+<ParamField path="x" type="numpy.ndarray" required>
+  Normalized parameter values. Supports 1D, 2D, or 3D arrays
+</ParamField>
+
+**Returns:** `numpy.ndarray` - Unnormalized parameter values
+
+## Functions
+
+### obj_to_string
+
+```python
+obj_to_string(obj, extra='    ')
+```
+
+Converts an object and its attributes to a formatted string representation.
+
+<ParamField path="obj" type="object" required>
+  Object to convert to string
+</ParamField>
+
+<ParamField path="extra" type="str" default="'    '">
+  Indentation string for nested attributes
+</ParamField>
+
+**Returns:** `str` - Formatted string representation of the object
+
+### bin_resample
+
+```python
+bin_resample(data, freq_1, freq_ds)
+```
+
+Resamples data from one frequency grid to a downsampled frequency grid.
+
+<ParamField path="data" type="numpy.ndarray" required>
+  Data values at original frequency points
+</ParamField>
+
+<ParamField path="freq_1" type="numpy.ndarray" required>
+  Original frequency grid
+</ParamField>
+
+<ParamField path="freq_ds" type="numpy.ndarray" required>
+  Downsampled frequency grid
+</ParamField>
+
+**Returns:** `numpy.ndarray` - Resampled data on the downsampled grid
+
+### get_size
+
+```python
+get_size(obj, seen=None)
+```
+
+Recursively calculates the memory size of an object in bytes.
+
+<ParamField path="obj" type="object" required>
+  Object to measure
+</ParamField>
+
+<ParamField path="seen" type="set" default="None">
+  Set of already-seen object IDs (used internally for recursion)
+</ParamField>
+
+**Returns:** `int` - Total size in bytes
+
+### change_parameter_values_and_save
+
+```python
+change_parameter_values_and_save(cellml_file, parameter_names, parameter_values, output_file)
+```
+
+Modifies parameter values in a CellML model and saves the updated model.
+
+<ParamField path="cellml_file" type="str" required>
+  Path to the input CellML file
+</ParamField>
+
+<ParamField path="parameter_names" type="list[str]" required>
+  List of parameter names to modify (format: "module/name")
+</ParamField>
+
+<ParamField path="parameter_values" type="list[float]" required>
+  Corresponding list of new parameter values
+</ParamField>
+
+<ParamField path="output_file" type="str" required>
+  Path where the modified model will be saved
+</ParamField>
+
+**Raises:** `ValueError` if parameter_names and parameter_values have different lengths
+
+**Notes:**
+- Parses model in non-strict mode to allow non-CellML 2.0 models
+- Resolves imports and flattens the model
+- Searches for parameters in 'parameters', 'parameters_global', and module-specific components
+
+### calculate_hessian
+
+```python
+calculate_hessian(param_id, AD=False)
+```
+
+Calculates the Hessian matrix of the log-likelihood function.
+
+<ParamField path="param_id" type="object" required>
+  Parameter identification object with `best_param_vals` attribute and `get_lnlikelihood_lnprior_from_params` method
+</ParamField>
+
+<ParamField path="AD" type="bool" default="False">
+  Whether to use automatic differentiation (not yet implemented)
+</ParamField>
+
+**Returns:** `numpy.ndarray` - Hessian matrix (n_params × n_params)
+
+**Raises:** 
+- `ValueError` if best_param_vals is not set
+- `NotImplementedError` if AD=True
+
+### hessian_fd
+
+```python
+hessian_fd(f, theta, eps=1e-6)
+```
+
+Calculates the Hessian matrix using finite differences.
+
+<ParamField path="f" type="callable" required>
+  Function to differentiate (should accept parameter array and return scalar)
+</ParamField>
+
+<ParamField path="theta" type="numpy.ndarray" required>
+  Parameter values at which to compute the Hessian
+</ParamField>
+
+<ParamField path="eps" type="float" default="1e-6">
+  Relative step size for finite differences
+</ParamField>
+
+**Returns:** `numpy.ndarray` - Symmetric Hessian matrix
+
+### hessian_gauss_newton
+
+```python
+hessian_gauss_newton(residual, theta, eps=1e-6)
+```
+
+Calculates the Gauss-Newton approximation of the Hessian matrix.
+
+<ParamField path="residual" type="callable" required>
+  Function that returns residuals given parameters
+</ParamField>
+
+<ParamField path="theta" type="numpy.ndarray" required>
+  Parameter values at which to compute the Hessian
+</ParamField>
+
+<ParamField path="eps" type="float" default="1e-6">
+  Relative step size for finite differences
+</ParamField>
+
+**Returns:** `numpy.ndarray` - Gauss-Newton Hessian approximation (H = J^T J)
+
+### get_default_inp_data_dict
+
+```python
+get_default_inp_data_dict(file_prefix, input_param_file, resources_dir)
+```
+
+Creates a default input data dictionary and parses user inputs.
+
+<ParamField path="file_prefix" type="str" required>
+  Prefix for output files
+</ParamField>
+
+<ParamField path="input_param_file" type="str" required>
+  Path to the YAML parameter file
+</ParamField>
+
+<ParamField path="resources_dir" type="str" required>
+  Directory containing resource files
+</ParamField>
+
+**Returns:** `dict` - Parsed input data dictionary

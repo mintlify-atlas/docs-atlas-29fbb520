@@ -1,0 +1,192 @@
+---
+title: Sensitivity Analysis
+description: Perform Sobol sensitivity analysis to identify influential parameters and streamline calibration workflows
+---
+
+Sensitivity Analysis (SA) is a recommended first step in the calibration pipeline because it performs crucial **parameter screening**. Calibration is the process of tuning numerous model parameters (inputs) until the model's output matches experimental data. Without SA, a modeler might waste weeks tuning parameters that have virtually no impact on the final result, or unknowingly tune parameters that are highly correlated, leading to non-unique solutions.
+
+## Why Use Sensitivity Analysis?
+
+SA efficiently identifies:
+
+- **Influential parameters:** Which parameters contribute most significantly to the model's output variance
+- **Non-influential parameters:** Which parameters can be fixed or ignored, drastically simplifying the calibration space
+
+SA ensures that the calibration effort is focused, efficient, and physically meaningful.
+
+## The Sobol Method
+
+The Sobol method is a powerful, **global, variance-based** sensitivity analysis technique. Unlike local methods that only test parameter changes one at a time, the Sobol method explores the entire input space simultaneously.
+
+**Key Feature:** It quantifies the contribution of each individual input parameter (First-Order Index, S_i) and the contribution of parameter interactions (Second-Order, Total-Order Index, S_{Ti}) to the overall output variance.
+
+This comprehensive approach allows modelers to understand not only which parameters are important on their own, but also how complex, synergistic interactions between two or more parameters drive the final simulation results.
+
+## Prerequisites
+
+Before running sensitivity analysis, you need:
+
+- A generated model and `obs_data.json` file (see [Parameter Identification](/api/param-id/param-id-class))
+- A `params_for_id.csv` file defining parameter ranges
+- OpenCOR Python environment with MPI if running in parallel
+
+<Note>
+Since SA is intertwined with parameter identification, you'll need the same input files. However, the exact values of the data terms in the observation file are not critical for SA itself, as you are simply exploring parameter space and variance, not matching the simulation output to observed data.
+</Note>
+
+Crucially, each data item defined in your `obs_data.json` file is treated as a feature for SA, meaning you will receive a separate set of plots (one for first and total order indices, and one for second order indices) for **each** data item.
+
+## Configuration
+
+Add a `sa_options` block to your `user_inputs.yaml` configuration file:
+
+```yaml user_inputs.yaml
+sa_options:
+  method: 'sobol'
+  num_samples: 1024
+  sample_type: saltelli
+  output_dir: <SA_outputs_path>
+```
+
+### Configuration Options
+
+<ResponseField name="method" type="string" default="sobol">
+  Sensitivity analysis method. Available options: `'naive'` or `'sobol'`
+</ResponseField>
+
+<ResponseField name="num_samples" type="integer" default="32">
+  Number of samples for the analysis. The actual number of samples is calculated as:
+  
+  `actual_num_samples = num_samples * (2M + 2)`
+  
+  where M is the number of parameters. This means the `num_samples` you set doesn't need to be dependent on M.
+</ResponseField>
+
+<ResponseField name="sample_type" type="string" default="saltelli">
+  Sampling method. Currently available: `'saltelli'`
+</ResponseField>
+
+<ResponseField name="output_dir" type="string" default="sensitivity_outputs/<file_prefix>_SA_results">
+  Directory where SA results and plots will be saved
+</ResponseField>
+
+<Warning>
+An indicator that the **sample size may be too low** is the observation of **relatively large negative values for the Sobol indices** in the results. If this occurs, increase `num_samples` and re-run the analysis.
+</Warning>
+
+## Running Sensitivity Analysis
+
+First, ensure you have the required sensitivity analysis packages specified in the Getting Started guide.
+
+To run the script with **MPI for parallelized computation** on CPU:
+
+```bash
+./run_sensitivity_analysis.sh <NUM_CORES>
+```
+
+### Example
+
+```bash
+./run_sensitivity_analysis.sh 8
+```
+
+## Expected Output
+
+After successful execution, you will find SA plots in the directory specified by `output_dir`, including:
+
+- **First-order indices (S1):** Individual parameter contributions
+- **Total-order indices (ST):** Total parameter contributions including interactions
+- **Second-order indices (S2):** Pairwise parameter interaction effects
+- **Heatmaps:** Visual representation of sensitivity indices
+
+## Interpreting Results
+
+### First-Order Index (S1)
+
+The first-order index measures the contribution of a single parameter to the output variance, independent of interactions with other parameters.
+
+- **High S1 value (close to 1):** Parameter has strong direct influence on the output
+- **Low S1 value (close to 0):** Parameter has minimal direct influence
+
+### Total-Order Index (ST)
+
+The total-order index measures the total contribution of a parameter, including all interactions with other parameters.
+
+- **High ST value:** Parameter is important either directly or through interactions
+- **ST >> S1:** Parameter is strongly involved in interactions with other parameters
+- **ST ≈ S1:** Parameter effects are mainly independent (few interactions)
+
+### Second-Order Index (S2)
+
+The second-order index quantifies the interaction effect between two specific parameters.
+
+- **High S2 value:** Strong synergistic effect between the parameter pair
+- **Low S2 value:** Parameters act independently
+
+## Selecting Parameters for Calibration
+
+You can programmatically select the most influential parameters using the `choose_most_impactful_params_sobol` method:
+
+```python
+# Select top 5 parameters by total-order index
+top_params = sa_analysis.choose_most_impactful_params_sobol(
+    top_n=5,
+    index_type='ST',
+    criterion='max'
+)
+```
+
+### Parameters
+
+<ResponseField name="top_n" type="integer" default="5">
+  Maximum number of parameters to return
+</ResponseField>
+
+<ResponseField name="index_type" type="string" default="ST">
+  Which Sobol index to use: `'ST'` (total-order) or `'S1'` (first-order)
+</ResponseField>
+
+<ResponseField name="criterion" type="string" default="max">
+  Selection criterion: `'max'` (maximum value across outputs), `'mean'` (average across outputs), or a custom function
+</ResponseField>
+
+<ResponseField name="threshold" type="float" default="0.01">
+  Minimum score required (only used if `use_threshold=True`)
+</ResponseField>
+
+<ResponseField name="use_threshold" type="boolean" default="false">
+  Whether to reject parameters below the threshold
+</ResponseField>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error about params_for_id_path">
+    Confirm your `params_for_id.csv` filename and `resources_dir` are correctly specified in `user_inputs.yaml`.
+  </Accordion>
+
+  <Accordion title="MPI errors">
+    Ensure `mpiexec` is available on your system and `mpi4py` is installed in the OpenCOR Python environment:
+    
+    ```bash
+    python -m pip install mpi4py
+    ```
+  </Accordion>
+
+  <Accordion title="Large negative Sobol indices">
+    This indicates the sample size is too low. Increase `num_samples` in `sa_options` and re-run the analysis.
+  </Accordion>
+
+  <Accordion title="Out of memory errors">
+    Reduce `num_samples` or increase the number of cores to distribute the computational load across more processes.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+After completing sensitivity analysis:
+
+1. Review the Sobol indices to identify influential parameters
+2. Fix non-influential parameters to their nominal values
+3. Proceed to [Parameter Identification](/api/param-id/param-id-class) with the reduced parameter set
+4. Consider running [Identifiability Analysis](/analysis/identifiability-analysis) after parameter identification to assess parameter uncertainty

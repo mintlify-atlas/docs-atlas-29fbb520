@@ -1,0 +1,287 @@
+---
+title: CVS0DParamID
+description: Parameter identification for 0D cardiovascular models
+---
+
+## CVS0DParamID
+
+Class for performing parameter identification on 0D cardiovascular system models using various optimization methods.
+
+### Constructor
+
+```python
+CVS0DParamID(
+    model_path,
+    model_type,
+    param_id_method,
+    mcmc_instead=False,
+    file_name_prefix='no_name',
+    params_for_id_path=None,
+    param_id_obs_path=None,
+    sim_time=2.0,
+    pre_time=20.0,
+    dt=0.01,
+    solver_info=None,
+    mcmc_options=None,
+    optimiser_options=None,
+    DEBUG=False,
+    param_id_output_dir=None,
+    resources_dir=None,
+    one_rank=False
+)
+```
+
+<ParamField path="model_path" type="str" required>
+  Path to the model file (CellML or Python model)
+</ParamField>
+
+<ParamField path="model_type" type="str" required>
+  Type of model: `'cellml_only'` or `'python'`
+</ParamField>
+
+<ParamField path="param_id_method" type="str" required>
+  Optimization method: `'genetic_algorithm'`, `'bayesian'`, or `'cmaes'`
+</ParamField>
+
+<ParamField path="mcmc_instead" type="bool" default="False">
+  Use MCMC sampling instead of optimization
+</ParamField>
+
+<ParamField path="file_name_prefix" type="str" default="'no_name'">
+  Prefix for output files
+</ParamField>
+
+<ParamField path="params_for_id_path" type="str" default="None">
+  Path to JSON file specifying parameters to identify
+</ParamField>
+
+<ParamField path="param_id_obs_path" type="str" default="None">
+  Path to JSON file containing observational data for parameter identification
+</ParamField>
+
+<ParamField path="sim_time" type="float" default="2.0">
+  Simulation time in seconds
+</ParamField>
+
+<ParamField path="pre_time" type="float" default="20.0">
+  Pre-simulation time to reach steady state (seconds)
+</ParamField>
+
+<ParamField path="dt" type="float" default="0.01">
+  Time step for simulation (seconds)
+</ParamField>
+
+<ParamField path="solver_info" type="dict" default="None">
+  Solver configuration. Defaults to `{"solver": "CVODE"}` if not provided
+</ParamField>
+
+<ParamField path="mcmc_options" type="dict" default="None">
+  Options for MCMC sampling (only used if `mcmc_instead=True`)
+</ParamField>
+
+<ParamField path="optimiser_options" type="dict" default="None">
+  Optimizer configuration with keys:
+  - `cost_convergence` (float): Cost threshold for convergence (default: 0.0001)
+  - `max_patience` (int): Maximum generations without improvement (default: 10)
+  - `num_calls_to_function` (int): Maximum function evaluations (default: 10000)
+</ParamField>
+
+<ParamField path="DEBUG" type="bool" default="False">
+  Enable debug mode with smaller population sizes
+</ParamField>
+
+<ParamField path="param_id_output_dir" type="str" default="None">
+  Directory for output files. Defaults to `../../param_id_output`
+</ParamField>
+
+<ParamField path="resources_dir" type="str" default="None">
+  Directory for resource files. Defaults to `../../resources`
+</ParamField>
+
+<ParamField path="one_rank" type="bool" default="False">
+  Run on single MPI rank without barriers
+</ParamField>
+
+### Alternative Constructor
+
+```python
+CVS0DParamID.init_from_dict(inp_data_dict)
+```
+
+<ParamField path="inp_data_dict" type="dict" required>
+  Dictionary containing initialization parameters. Supports all constructor arguments as keys.
+</ParamField>
+
+### Methods
+
+#### run()
+
+Run the parameter identification optimization.
+
+```python
+param_id.run()
+```
+
+Executes the selected optimization method and saves results to the output directory.
+
+#### run_mcmc()
+
+Run MCMC sampling (only available if `mcmc_instead=True`).
+
+```python
+param_id.run_mcmc()
+```
+
+#### simulate_with_best_param_vals()
+
+Simulate the model using the best identified parameters.
+
+```python
+param_id.simulate_with_best_param_vals(reset=True, only_one_exp=-1)
+```
+
+<ParamField path="reset" type="bool" default="True">
+  Reset the simulation before running
+</ParamField>
+
+<ParamField path="only_one_exp" type="int" default="-1">
+  Run only a specific experiment index (or -1 for all)
+</ParamField>
+
+#### plot_outputs()
+
+Generate plots comparing model outputs with observational data.
+
+```python
+param_id.plot_outputs()
+```
+
+Creates comparison plots, error bar plots, and saves them to the plot directory.
+
+#### plot_mcmc()
+
+Plot MCMC results including chain plots and corner plots.
+
+```python
+param_id.plot_mcmc()
+```
+
+#### set_ground_truth_data()
+
+Set observational data for parameter identification.
+
+```python
+param_id.set_ground_truth_data(obs_data_dict)
+```
+
+<ParamField path="obs_data_dict" type="dict" required>
+  Dictionary containing observational data configuration
+</ParamField>
+
+#### set_params_for_id()
+
+Set which parameters to identify.
+
+```python
+param_id.set_params_for_id(params_for_id_dict)
+```
+
+<ParamField path="params_for_id_dict" type="dict" required>
+  Dictionary specifying parameters to identify with their ranges
+</ParamField>
+
+#### set_best_param_vals()
+
+Manually set the best parameter values.
+
+```python
+param_id.set_best_param_vals(best_param_vals)
+```
+
+<ParamField path="best_param_vals" type="array" required>
+  Array of parameter values
+</ParamField>
+
+#### set_optimiser_options()
+
+Update optimizer configuration.
+
+```python
+param_id.set_optimiser_options(optimiser_options)
+```
+
+<ParamField path="optimiser_options" type="dict" required>
+  Dictionary with optimizer options
+</ParamField>
+
+#### set_param_id_method()
+
+Change the parameter identification method.
+
+```python
+param_id.set_param_id_method(param_id_method)
+```
+
+<ParamField path="param_id_method" type="str" required>
+  New optimization method name
+</ParamField>
+
+#### add_user_operation_func()
+
+Add custom operation function for processing model outputs.
+
+```python
+param_id.add_user_operation_func(func)
+```
+
+<ParamField path="func" type="callable" required>
+  Custom operation function
+</ParamField>
+
+#### add_user_cost_func()
+
+Add custom cost function for parameter identification.
+
+```python
+param_id.add_user_cost_func(func)
+```
+
+<ParamField path="func" type="callable" required>
+  Custom cost function
+</ParamField>
+
+### Example Usage
+
+```python
+from param_id.paramID import CVS0DParamID
+
+# Initialize parameter identification
+param_id = CVS0DParamID(
+    model_path='models/cvs_model.cellml',
+    model_type='cellml_only',
+    param_id_method='genetic_algorithm',
+    params_for_id_path='config/params_to_identify.json',
+    param_id_obs_path='data/observations.json',
+    sim_time=5.0,
+    pre_time=50.0,
+    dt=0.01,
+    optimiser_options={
+        'cost_convergence': 0.0001,
+        'max_patience': 10,
+        'num_calls_to_function': 5000
+    }
+)
+
+# Run optimization
+param_id.run()
+
+# Simulate with best parameters
+param_id.simulate_with_best_param_vals()
+
+# Generate plots
+param_id.plot_outputs()
+```
+
+### Source Location
+
+`~/workspace/source/src/param_id/paramID.py:74`

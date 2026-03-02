@@ -1,0 +1,195 @@
+---
+title: Installation
+description: Install OpenCOR and set up the Circulatory Autogen Python environment
+---
+
+## Prerequisites
+
+Before installing Circulatory Autogen, ensure you have:
+
+- **OpenCOR >0.8.1** installed locally or available on your HPC
+- **Git** for cloning the repository
+- **MPI** (optional) if you plan to run parameter identification or sensitivity analysis in parallel
+
+<Note>
+If you are not familiar with OpenCOR, complete the [OpenCOR Tutorial](https://tutorial-on-cellml-opencor-and-pmr.readthedocs.io/en/latest/_downloads/d271cfcef7e288704c61320e64d77e2d/OpenCOR-Tutorial-v17.pdf) before starting.
+</Note>
+
+## Installation Steps
+
+<Steps>
+  <Step title="Install OpenCOR">
+    Download and install OpenCOR version 0.8.1 or later from the [official website](https://opencor.ws/downloads/index.html).
+
+    We recommend installing with zip/tarball in a directory where you have access and edit rights, such as `~/Desktop`.
+
+    ```bash
+    # Example for Linux
+    cd ~/Desktop
+    wget https://opencor.ws/downloads/OpenCOR-0.8.1-Linux.tar.gz
+    tar -xzf OpenCOR-0.8.1-Linux.tar.gz
+    ```
+
+    <Info>
+    If running on ABI HPC, you can use the pre-installed OpenCOR at `/hpc/farg967/OpenCOR-0-8-1-Linux/`
+    </Info>
+  </Step>
+
+  <Step title="Clone the Repository">
+    Clone the Circulatory Autogen project from GitHub:
+
+    ```bash
+    git clone https://github.com/FinbarArgus/circulatory_autogen
+    cd circulatory_autogen
+    ```
+
+    <Note>
+    For development, fork the repository first:
+    
+    ```bash
+    git clone https://github.com/<YourUsername>/circulatory_autogen
+    cd circulatory_autogen
+    git remote add upstream https://github.com/FinbarArgus/circulatory_autogen
+    ```
+    </Note>
+  </Step>
+
+  <Step title="Install Python Dependencies">
+    Circulatory Autogen requires OpenCOR's bundled Python environment. Navigate to your OpenCOR directory and install dependencies:
+
+    <CodeGroup>
+    ```bash Linux
+    cd ~/Desktop/OpenCOR-0-8-1-Linux/
+    ./pip install -r /path/to/circulatory_autogen/requirements.txt
+    ```
+
+    ```bash Mac
+    cd ~/Desktop/OpenCOR-0-8-1-Mac/
+    ./pythonshell -m pip install -r /path/to/circulatory_autogen/requirements.txt
+    ```
+
+    ```bash Windows
+    cd C:\Desktop\OpenCOR-0-8-1-Windows\
+    .\pythonshell.bat -m pip install -r C:\path\to\circulatory_autogen\requirements.txt
+    ```
+    </CodeGroup>
+
+    The key dependencies include:
+
+    - **Autogeneration**: `pandas`, `pyyaml`, `rdflib`, `libcellml==0.6.3`
+    - **Parameter identification**: `mpi4py`, `sympy`, `emcee`, `corner`, `schwimmbad`, `tqdm`, `statsmodels`
+    - **Sensitivity analysis**: `SALib==1.5.1`, `seaborn`
+    - **CMA-ES optimization**: `nevergrad==1.0.12`
+    - **Utilities/tests**: `ruamel.yaml`, `pytest`
+  </Step>
+
+  <Step title="Install MPI (Optional)">
+    For parallel parameter identification and sensitivity analysis, install MPI:
+
+    <CodeGroup>
+    ```bash Linux
+    sudo apt install libopenmpi-dev
+    sudo apt install libffi7
+    ```
+
+    ```bash Mac
+    brew install openmpi
+    ```
+
+    ```text Windows
+    Download and install MS MPI (both .msi and SDK) from Microsoft.
+    
+    Add to environment variables:
+    - C:\Program Files\Microsoft MPI\
+    - C:\Program Files (x86)\Microsoft SDKs\MPI\
+    ```
+    </CodeGroup>
+
+    <Warning>
+    Installing `mpi4py` requires MPI to be available on your system first.
+    </Warning>
+  </Step>
+
+  <Step title="Configure Python Path">
+    Set the path to OpenCOR's Python shell in the configuration file:
+
+    ```bash
+    cd circulatory_autogen/user_run_files
+    nano opencor_pythonshell_path.sh
+    ```
+
+    Update the `opencor_pythonshell_path` variable:
+
+    <CodeGroup>
+    ```bash Linux/Mac
+    opencor_pythonshell_path=~/Desktop/OpenCOR-0-8-1-Linux/pythonshell
+    ```
+
+    ```bash Windows
+    opencor_pythonshell_path=C:\Desktop\OpenCOR-0-8-1-Windows\pythonshell.bat
+    ```
+    </CodeGroup>
+
+    <Note>
+    Use the full absolute path to your OpenCOR installation.
+    </Note>
+  </Step>
+
+  <Step title="Verify Installation">
+    Test that the installation is working by running the autogeneration test:
+
+    ```bash
+    cd circulatory_autogen/user_run_files
+    ./run_test_autogeneration.sh
+    ```
+
+    If successful, you should see "Model generation has been successful" at the end of the output.
+  </Step>
+</Steps>
+
+## Directory Structure
+
+After installation, you should have:
+
+```
+circulatory_autogen/
+├── resources/              # Example models and parameters
+├── src/                    # Source code
+├── user_run_files/         # Run scripts and user_inputs.yaml
+├── funcs_user/             # User-defined functions
+├── module_config_user/     # User-defined modules
+├── generated_models/       # Generated models (created on first run)
+└── requirements.txt        # Python dependencies
+```
+
+## Expected Outcome
+
+You should now have:
+
+- A working OpenCOR Python environment with project dependencies installed
+- A clone of the repository ready for running tutorials
+- `opencor_pythonshell_path.sh` configured to your OpenCOR installation
+
+## Troubleshooting
+
+### SSL Error (OpenCOR < 0.8)
+
+If you get an SSL error during pip install on older OpenCOR versions:
+
+```bash
+cd [OpenCOR_dir]/python/bin
+export LD_LIBRARY_PATH=[OpenCOR_dir]/lib
+./python -m pip install <packagename>
+```
+
+### Alternative: Python-centric workflow
+
+For debugging or IDE integration, you can run Python scripts directly using OpenCOR's Python interpreter instead of using `.sh` files. The `.sh` files in `user_run_files` show which script each command runs.
+
+See the Jupyter notebook tutorial at `/tutorial/interactive/generate_and_calibrate.ipynb` for a Python-centric approach.
+
+## Next Steps
+
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Generate your first 3-compartment model
+</Card>

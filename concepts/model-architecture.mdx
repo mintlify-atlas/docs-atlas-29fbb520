@@ -1,0 +1,421 @@
+---
+title: Model Architecture
+description: Understanding the CVS0DModel structure, vessel-based architecture, component connections, and boundary conditions
+---
+
+Circulatory Autogen uses a vessel-based architecture where the cardiovascular system is represented as a network of interconnected components. Each component (vessel) is a CellML module that can be coupled with others through defined ports.
+
+## CVS0DModel Structure
+
+The core model representation is the `CVS0DModel` class defined in `src/models/LumpedModels.py`:
+
+```python
+class CVS0DModel(object):
+    '''
+    Representation of a 0D cardiovascular model
+    '''
+    def __init__(self, vessels_df, parameters_array,
+                 param_id_name_and_vals=None, param_id_date=None):
+        self.vessels_df = vessels_df
+        self.parameters_array = parameters_array
+        self.param_id_date = param_id_date
+        self.param_id_name_and_vals = param_id_name_and_vals
+        self.possible_vessel_types = None
+        self.possible_BC_types = None
+```
+
+### Model Components
+
+<ResponseField name="vessels_df" type="DataFrame">
+  The vessel network topology loaded from `[file_prefix]_vessel_array.csv`. Contains:
+  - `name` - Unique identifier for each vessel
+  - `BC_type` - Boundary condition type
+  - `vessel_type` - Module type from config JSON
+  - `inp_vessels` - Space-separated list of input vessels
+  - `out_vessels` - Space-separated list of output vessels
+</ResponseField>
+
+<ResponseField name="parameters_array" type="array">
+  Model parameter values loaded from `[file_prefix]_parameters.csv`. Includes:
+  - Module-specific constants (e.g., `R_heart`, `C_aortic_root`)
+  - Global constants (e.g., `rho`, `mu`)
+  - Initial conditions
+  - Boundary condition values (for unconnected ports)
+</ResponseField>
+
+<ResponseField name="param_id_name_and_vals" type="dict">
+  Dictionary of calibrated parameter values after running parameter identification. Maps parameter names to fitted values.
+</ResponseField>
+
+<ResponseField name="param_id_date" type="str">
+  Timestamp indicating when parameter identification was performed.
+</ResponseField>
+
+## Vessel-Based Architecture
+
+The cardiovascular system is decomposed into modular components called "vessels" - though they can represent any physiological component:
+
+<Tabs>
+  <Tab title="Vascular Components">
+    - **Arterial vessels** - Elastic arteries with compliance
+    - **Venous vessels** - Veins with compliance and resistance
+    - **Terminal vessels** - Capillary beds and microcirculation
+    - **Junctions** - Bifurcations and merges (split/merge junctions)
+  </Tab>
+  
+  <Tab title="Cardiac Components">
+    - **Heart chambers** - Atria and ventricles with time-varying elastance
+    - **Valves** - One-way flow restrictions
+    - **Activation functions** - Time-varying elastance drivers
+  </Tab>
+  
+  <Tab title="Control Components">
+    - **Baroreceptors** - Pressure sensors
+    - **Chemoreceptors** - Chemical sensors (O2, CO2)
+    - **Control systems** - Neural and hormonal regulation
+  </Tab>
+  
+  <Tab title="Transport Components">
+    - **Gas exchange** - O2 and CO2 transport
+    - **Metabolism** - Oxygen consumption
+    - **Ion channels** - Cellular electrophysiology
+  </Tab>
+</Tabs>
+
+### Example: 3-Compartment Model
+
+From `resources/3compartment_vessel_array.csv`:
+
+```csv
+name,BC_type,vessel_type,inp_vessels,out_vessels
+pvn,vp,venous,par,heart volume_sum
+par,vp,arterial_simple,heart,pvn volume_sum
+heart,vp_Ca,heart,venous_svc pvn,aortic_root par volume_sum
+aortic_root,vv,arterial_simple,heart,systemic_T volume_sum
+systemic_T,pp,terminal,aortic_root,venous_svc volume_sum
+venous_svc,vp,venous,systemic_T,heart volume_sum
+volume_sum,nn,volume_sum,pvn par heart aortic_root systemic_T venous_svc,
+```
+
+This model has:
+- **Heart** - Pumps blood to pulmonary (pvn) and systemic (aortic_root, par) circulations
+- **Pulmonary circulation** - `heart → par → pvn → heart`
+- **Systemic circulation** - `heart → aortic_root → systemic_T → venous_svc → heart`
+- **volume_sum** - Conservation constraint ensuring total volume is constant
+
+## How Components Connect
+
+Components connect through **vessel arrays** which define the network topology:
+
+### Connection Syntax
+
+<ParamField path="name" type="string" required>
+  Unique identifier for the vessel/component.
+  
+  Examples: `heart`, `aortic_root`, `arm_L_T`, `baroreceptor_aorta`
+</ParamField>
+
+<ParamField path="BC_type" type="string" required>
+  Boundary condition type defining input/output causality:
+  - `vv` - Volume flow in, volume flow out
+  - `vp` - Volume flow in, pressure out
+  - `pv` - Pressure in, volume flow out  
+  - `pp` - Pressure in, pressure out
+  - `nn` - No boundary conditions (for non-vascular modules)
+  - `vp_Ca` - Volume flow in, pressure out, with calcium dynamics
+</ParamField>
+
+<ParamField path="vessel_type" type="string" required>
+  Module type from the configuration JSON files.
+  
+  Examples: `arterial`, `arterial_simple`, `venous`, `terminal`, `heart`, `split_junction`, `merge_junction`
+</ParamField>
+
+<ParamField path="inp_vessels" type="string">
+  Space-separated list of input vessel names. Can be:
+  - Single vessel: `heart`
+  - Multiple vessels: `venous_ivc venous_svc`
+  - Empty for source components
+</ParamField>
+
+<ParamField path="out_vessels" type="string">
+  Space-separated list of output vessel names. Can be:
+  - Single vessel: `aortic_root`
+  - Multiple vessels: `ascending_aorta systemic_T`
+  - Empty for sink components
+</ParamField>
+
+### Connection Logic
+
+When `vessel_a` lists `vessel_b` in its `out_vessels`:
+
+1. **Exit ports** of `vessel_a` are matched with **entrance ports** of `vessel_b` by `port_type`
+2. Variables are coupled in order: `vessel_a["v", "u_out"]` → `vessel_b["v_in", "u"]`
+3. **General ports** couple to any matching port type regardless of direction
+
+<Note>
+The system automatically handles one-to-many and many-to-one connections using multi-port support.
+</Note>
+
+### Example: Physiological Model Connections
+
+From `resources/simple_physiological_vessel_array.csv`:
+
+```csv
+name,BC_type,vessel_type,inp_vessels,out_vessels
+heart,vp,heart,venous_ivc venous_svc,ascending_aorta_A
+ascending_aorta_A,vv,arterial,heart,ascending_aorta_B
+ascending_aorta_B,pv,arterial,ascending_aorta_A,ascending_aorta_C
+...
+aortic_arch_C2,pv,split_junction,ascending_aorta_D,aortic_arch_C46 brachiocephalic_trunk_C4
+brachiocephalic_trunk_C4,pv,split_junction,aortic_arch_C2,common_carotid_R6_A subclavian_R28
+...
+venous_lb,vp,venous,leg_L_T leg_R_T trunk_C_T,venous_ivc
+venous_ivc,vp,venous,venous_lb,heart
+```
+
+Key features:
+- **Multiple inputs** - `heart` receives from two veins, `venous_lb` receives from three terminal beds
+- **Split junctions** - `aortic_arch_C2` splits into two branches
+- **Cascading BC types** - `vv → pv → pv` for arterial tree (flow-driven at root, pressure-driven downstream)
+
+## Boundary Conditions
+
+Boundary conditions define the input/output causality of each module:
+
+<AccordionGroup>
+  <Accordion title="vv - Volume Flow In/Out" icon="arrows-left-right">
+    **Input:** Volume flow rate (`v_in`)
+    
+    **Output:** Volume flow rate (`v_out`)
+    
+    **Use case:** Internal vessels with no external pressure constraints
+    
+    **Example:** Mid-arterial segments in a long vessel chain
+  </Accordion>
+  
+  <Accordion title="vp - Volume Flow In, Pressure Out" icon="arrow-right-to-line">
+    **Input:** Volume flow rate (`v_in`)
+    
+    **Output:** Pressure (`u_out`)
+    
+    **Use case:** Vessels with known input flow and compliance determining output pressure
+    
+    **Example:** Heart (pumps flow, pressure determined by afterload), venous return (collects flow, pressure at entrance to heart)
+  </Accordion>
+  
+  <Accordion title="pv - Pressure In, Volume Flow Out" icon="arrow-right-from-line">
+    **Input:** Pressure (`u_in`)
+    
+    **Output:** Volume flow rate (`v_out`)
+    
+    
+    **Use case:** Vessels with known input pressure and resistance determining output flow
+    
+    **Example:** Arterial segments (pressure from upstream, flow through resistance)
+  </Accordion>
+  
+  <Accordion title="pp - Pressure In/Out" icon="equals">
+    **Input:** Pressure (`u_in`)
+    
+    **Output:** Pressure (`u_out`)
+    
+    **Use case:** Terminal loads representing microcirculation
+    
+    **Example:** Capillary beds with Windkessel resistance-compliance
+  </Accordion>
+  
+  <Accordion title="nn - No Boundary Conditions" icon="ban">
+    **Input:** None (or custom via general ports)
+    
+    **Output:** None (or custom via general ports)
+    
+    **Use case:** Non-vascular modules like control systems, sensors, or constraints
+    
+    **Example:** Baroreceptors, volume conservation constraints, ion channels
+  </Accordion>
+  
+  <Accordion title="Special Types (vp_Ca, pp_wCont, etc.)" icon="star">
+    Variants of standard BCs with additional features:
+    - `vp_Ca` - vp-type heart with calcium dynamics
+    - `pp_wCont` - pp-type with control system integration
+    - `pp_wLocal` - pp-type with local autoregulation
+    
+    These require corresponding module configurations.
+  </Accordion>
+</AccordionGroup>
+
+## Component Hierarchy
+
+A typical cardiovascular model has this component hierarchy:
+
+```
+CVS0DModel
+├── Cardiac Components
+│   ├── Heart (vp or vp_Ca)
+│   │   ├── Left ventricle
+│   │   ├── Right ventricle
+│   │   ├── Atria
+│   │   └── Valves
+│   └── Activation functions
+│
+├── Systemic Circulation
+│   ├── Arterial Tree
+│   │   ├── Aorta segments (vv, pv)
+│   │   ├── Split junctions (pv)
+│   │   └── Branch arteries (pv)
+│   │
+│   ├── Terminal Beds (pp)
+│   │   ├── Head, arms
+│   │   ├── Trunk, organs
+│   │   └── Legs
+│   │
+│   └── Venous Return (vp)
+│       ├── Peripheral veins
+│       ├── Merge junctions (vp)
+│       └── Central veins (vena cava)
+│
+├── Pulmonary Circulation
+│   ├── Pulmonary arteries (pv)
+│   ├── Pulmonary capillaries (pp)
+│   └── Pulmonary veins (vp)
+│
+├── Control Systems (nn)
+│   ├── Baroreceptors
+│   ├── Chemoreceptors
+│   └── Neural/hormonal control
+│
+└── Constraints (nn)
+    ├── Volume conservation
+    └── Mass conservation
+```
+
+## Generated Model Files
+
+After autogeneration, four CellML files are created:
+
+<Steps>
+  <Step title="[file_prefix].cellml">
+    **Main model file** that imports and connects all components.
+    
+    - Imports modules, parameters, and units files
+    - Creates component instances for each vessel
+    - Defines connections between components based on port coupling
+    - Sets up the simulation structure
+  </Step>
+  
+  <Step title="[file_prefix]_modules.cellml">
+    **Module definitions** containing all CellML modules used in the model.
+    
+    - Aggregates modules from built-in and user-defined files
+    - Each vessel in the vessel array becomes an instance of a module
+    - Modules contain ODEs and algebraic equations
+  </Step>
+  
+  <Step title="[file_prefix]_parameters.cellml">
+    **Parameter component** defining all constants and initial conditions.
+    
+    - Constants from the parameters CSV
+    - Initial states for differential equations
+    - Boundary condition values for unconnected ports
+  </Step>
+  
+  <Step title="[file_prefix]_units.cellml">
+    **Unit definitions** for all quantities in the model.
+    
+    - Standard units from `src/generators/resources/units.cellml`
+    - Custom units from `module_config_user/user_units.cellml`
+    - Ensures dimensional consistency
+  </Step>
+</Steps>
+
+## Model State Variables
+
+The complete model state consists of:
+
+1. **Vessel volumes** - `q` for each compliant vessel (arterial, venous, heart)
+2. **Vessel flows** - `v` for each vessel with inertance
+3. **Cardiac states** - Activation, valve states, chamber volumes
+4. **Control states** - Baroreceptor firing rates, neural activity
+5. **Transport states** - O2/CO2 concentrations if gas transport is included
+6. **Cellular states** - Ion concentrations, membrane potentials if cell modules included
+
+The total number of ODEs depends on which modules are included and their complexity.
+
+## Simulation Workflow
+
+The generated model can be simulated in multiple ways:
+
+<CardGroup cols={2}>
+  <Card title="OpenCOR GUI" icon="window">
+    Open `[file_prefix].cellml` in OpenCOR:
+    - Configure simulation time and step size
+    - Set ODE solver (CVODE, Euler, etc.)
+    - Select variables to plot
+    - Run and visualize results
+  </Card>
+  
+  <Card title="OpenCOR Python" icon="python">
+    Use OpenCOR's Python interface:
+    ```python
+    import opencor as oc
+    s = oc.open_simulation('model.cellml')
+    s.run()
+    results = s.results()
+    ```
+  </Card>
+  
+  <Card title="Generated Python" icon="code">
+    Set `model_type: python` in `user_inputs.yaml` to generate a standalone Python module:
+    ```python
+    from generated_models.model import run
+    results = run(duration=10.0)
+    ```
+  </Card>
+  
+  <Card title="Generated C++" icon="c">
+    Set `model_type: cpp` for high-performance C++ code:
+    ```bash
+    ./generated_model --duration 10.0
+    ```
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<Accordion title="Start simple, then expand">
+  Begin with a minimal model (e.g., 3-compartment) and verify it works before adding complexity. This makes debugging easier.
+</Accordion>
+
+<Accordion title="Use consistent BC_type cascades">
+  For arterial trees: start with `vv` at the root (heart output), transition to `pv` for arterial segments, end with `pp` at terminals.
+  
+  For venous return: use `vp` throughout, merging flows back to the heart.
+</Accordion>
+
+<Accordion title="Check conservation constraints">
+  Add a `volume_sum` module (BC_type: `nn`) connected to all vessels to ensure total volume is conserved.
+</Accordion>
+
+<Accordion title="Name vessels clearly">
+  Use anatomical names (`aortic_arch`, `femoral_L`) or physiological names (`systemic_T`, `head_R_T`) for clarity.
+</Accordion>
+
+<Accordion title="Validate against physiology">
+  Check that:
+  - Cardiac output matches expected range (4-6 L/min at rest)
+  - Pressures are physiological (systemic: 120/80 mmHg, pulmonary: 25/10 mmHg)
+  - Flows sum to zero at steady state (conservation)
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Vessel Networks" icon="network-wired" href="/concepts/vessel-networks">
+    Learn how to define vessel arrays and network topology
+  </Card>
+  
+  <Card title="Model Generation" icon="gears" href="/generation/running-autogeneration">
+    Step-by-step guide to generating models
+  </Card>
+</CardGroup>

@@ -1,0 +1,524 @@
+---
+title: Output Files
+description: Understanding the generated file structure, CellML files, parameters CSV, and running generated models
+---
+
+Model autogeneration creates a complete set of files needed to simulate your cardiovascular model. This guide explains the purpose of each generated file and how to use them.
+
+## Output Directory Structure
+
+Generated models are written to:
+```
+generated_models/[file_prefix]/
+```
+
+For a model with `file_prefix: 3compartment`, the structure is:
+
+```
+generated_models/3compartment/
+├── 3compartment.cellml              # Main model file
+├── 3compartment_modules.cellml      # Component definitions  
+├── 3compartment_parameters.cellml   # Parameter values
+├── 3compartment_units.cellml        # Unit definitions
+├── 3compartment_parameters.csv      # Parameter table
+├── 3compartment_flat.cellml         # Flattened model (debug)
+└── 3compartment.py                  # Python module (if model_type: python)
+```
+
+<Note>
+All CellML files are linked through XML imports. You only need to open `[file_prefix].cellml` - the other files are loaded automatically.
+</Note>
+
+## CellML Files
+
+### Main Model File
+
+**Filename:** `[file_prefix].cellml`
+
+**Purpose:** Top-level model file that orchestrates all components
+
+**Contains:**
+- Imports of units, parameters, and modules
+- Component instantiation for each vessel
+- Variable mappings between connected vessels
+- Computational environment for summing flows/volumes
+- Time mapping to all components
+
+**Usage:**
+```python
+import opencor as oc
+
+# Open the main file
+sim = oc.open_simulation('generated_models/3compartment/3compartment.cellml')
+
+# All other files are imported automatically
+if sim.valid():
+    # Run simulation
+    sim.run()
+```
+
+### Modules File
+
+**Filename:** `[file_prefix]_modules.cellml`
+
+**Purpose:** Contains CellML component definitions for all vessel types used in your model
+
+**Contains:**
+- Component definitions (e.g., `vp_type`, `heart`, `terminal`)
+- Mathematical equations for each module
+- Variable declarations with units
+- Only includes modules actually used in your vessel_array
+
+**Structure:**
+```xml
+<?xml version='1.0' encoding='UTF-8'?>
+<model name="modules" xmlns="http://www.cellml.org/cellml/1.1#" ...>
+  
+  <!-- Units import -->
+  <import xlink:href="3compartment_units.cellml">
+    <units name="J_per_m3" units_ref="J_per_m3"/>
+    ...
+  </import>
+  
+  <!-- Component: Venous vessel -->
+  <component name="venous">
+    <variable name="time" units="second" public_interface="in"/>
+    <variable name="v" units="m3_per_s" public_interface="out"/>
+    <variable name="u" units="J_per_m3" public_interface="out"/>
+    ...
+    <math xmlns="http://www.w3.org/1998/Math/MathML">
+      <!-- Equations -->
+    </math>
+  </component>
+  
+  <!-- More components -->
+  
+</model>
+```
+
+**Source:** Assembled from:
+- `src/generators/resources/*_modules.cellml` (built-in)
+- `module_config_user/*_modules.cellml` (user-defined)
+- `external_modules_dir/*_modules.cellml` (if configured)
+
+### Parameters File
+
+**Filename:** `[file_prefix]_parameters.cellml`
+
+**Purpose:** Defines all constant parameter values as CellML variables
+
+**Contains:**
+- `parameters_global` component (global constants)
+- `parameters` component (vessel-specific constants)
+
+**Structure:**
+```xml
+<model name="Parameters" xmlns="http://www.cellml.org/cellml/1.1#" ...>
+  
+  <component name="parameters_global">
+    <variable name="T" units="second" initial_value="1.0" public_interface="out"/>
+    <variable name="rho" units="Js2_per_m5" initial_value="1050" public_interface="out"/>
+  </component>
+  
+  <component name="parameters">
+    <variable name="R_pvn" units="Js_per_m6" initial_value="1333000" public_interface="out"/>
+    <variable name="C_pvn" units="m6_per_J" initial_value="6.0015e-09" public_interface="out"/>
+    ...
+  </component>
+  
+</model>
+```
+
+**Dynamic updates:** After parameter identification, this file is regenerated with optimized values.
+
+### Units File
+
+**Filename:** `[file_prefix]_units.cellml`
+
+**Purpose:** Defines all physical units used in the model
+
+**Contains:**
+- Standard units (metre, second, joule, etc.)
+- Derived units (J_per_m3 for pressure, m3_per_s for flow)
+- Custom units from `user_units.cellml`
+
+**Source:** Concatenated from:
+- `src/generators/resources/units.cellml`
+- `module_config_user/user_units.cellml`
+
+**Example units:**
+```xml
+<units name="J_per_m3">
+  <unit units="joule"/>
+  <unit units="metre" exponent="-3"/>
+</units>
+
+<units name="m3_per_s">
+  <unit units="metre" exponent="3"/>
+  <unit units="second" exponent="-1"/>  
+</units>
+```
+
+### Flat Model (Debug)
+
+**Filename:** `[file_prefix]_flat.cellml`
+
+**Purpose:** Debugging aid - single file with all imports resolved
+
+**Usage:**
+- View the complete model without navigating imports
+- Analyze variable dependencies
+- Debug CellML structure issues
+
+<Note>
+The flat model is generated for debugging but not used in simulations. Always use the main `[file_prefix].cellml` file.
+</Note>
+
+## Parameters CSV
+
+**Filename:** `[file_prefix]_parameters.csv`
+
+**Purpose:** Human-readable parameter table with values and references
+
+**Format:**
+```csv
+variable_name,units,value,data_reference
+R_pvn,Js_per_m6,1333000,Blanco_2013_Table_8
+C_pvn,m6_per_J,6.0015e-09,to_be_identified
+T,second,1.0,Liang_2009_Table_2
+```
+
+### Usage Patterns
+
+<CodeGroup>
+```python Read in Python
+import pandas as pd
+
+params = pd.read_csv('generated_models/3compartment/3compartment_parameters.csv')
+
+# Get specific parameter
+r_pvn = params.loc[params['variable_name'] == 'R_pvn', 'value'].values[0]
+
+# Filter by reference
+to_calibrate = params[params['data_reference'] == 'to_be_identified']
+```
+
+```r Read in R
+params <- read.csv('generated_models/3compartment/3compartment_parameters.csv')
+
+# Get specific parameter  
+r_pvn <- params[params$variable_name == 'R_pvn', 'value']
+
+# Filter by reference
+to_calibrate <- params[params$data_reference == 'to_be_identified', ]
+```
+
+```bash Command Line
+# Extract all resistance values
+grep '^R_' generated_models/3compartment/3compartment_parameters.csv
+
+# Count parameters to identify
+grep 'to_be_identified' generated_models/3compartment/3compartment_parameters.csv | wc -l
+```
+</CodeGroup>
+
+### After Parameter Identification
+
+When parameter identification completes, this file is updated with:
+- Optimized parameter values (high precision)
+- Updated `data_reference` to `[date]_identified`
+
+**Before:**
+```csv
+C_pvn,m6_per_J,6.0015e-09,to_be_identified
+```
+
+**After:**
+```csv
+C_pvn,m6_per_J,5.8437291044e-09,2026-03-02_identified
+```
+
+## Python Module (Optional)
+
+**Filename:** `[file_prefix].py`
+
+**Generated when:** `model_type: python` in configuration
+
+**Purpose:** Native Python simulation without OpenCOR dependency
+
+**Usage:**
+```python
+import sys
+sys.path.append('generated_models/3compartment')
+import 3compartment as model
+
+# Create simulation
+from solver_wrappers.python_solver_helper import SimulationHelper
+
+sim = SimulationHelper(
+    'generated_models/3compartment/3compartment.py',
+    dt=0.01,
+    sim_time=2.0
+)
+
+# Set solver method
+sim.set_solve_ivp_method('BDF')
+
+# Run
+success = sim.run()
+
+if success:
+    # Access results
+    time = sim.get_time()
+    pressure = sim.get_variable('heart.u_lv')
+```
+
+**Advantages:**
+- Faster simulation for large parameter sweeps
+- Easier integration with Python scientific stack
+- No OpenCOR dependency for deployment
+
+**Limitations:**
+- May have slight numerical differences vs OpenCOR
+- Requires SciPy for solve_ivp
+
+## Running Generated Models
+
+### In OpenCOR GUI
+
+<Steps>
+  <Step title="Open model">
+    File → Open → Select `generated_models/[file_prefix]/[file_prefix].cellml`
+  </Step>
+  
+  <Step title="Switch to Simulation">
+    Click the **Simulation** tab at the top
+  </Step>
+  
+  <Step title="Configure simulation">
+    Set simulation parameters:
+    - Starting point: `0`
+    - Ending point: `2` (or your desired sim_time)
+    - Point interval: `0.01` (or your desired dt)
+    
+    Configure solver (optional):
+    - Maximum step: `0.0001`
+    - Relative tolerance: `1e-6`
+    - Absolute tolerance: `1e-9`
+  </Step>
+  
+  <Step title="Select variables to plot">
+    In the parameters panel:
+    - Right-click variables you want to plot (e.g., `heart.u_lv`)
+    - Choose "Plot Against time"
+  </Step>
+  
+  <Step title="Run simulation">
+    Click ▶️ Run button
+    
+    Results appear in the graph panel
+  </Step>
+  
+  <Step title="Export results">
+    Right-click graph → Export → CSV to save simulation data
+  </Step>
+</Steps>
+
+### Using Python (OpenCOR)
+
+```python
+import opencor as oc
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Open simulation
+sim = oc.open_simulation('generated_models/3compartment/3compartment.cellml')
+
+if not sim.valid():
+    print("Model is not valid!")
+    exit(1)
+
+# Configure simulation
+data = sim.data()
+data.set_ending_point(2.0)  # 2 seconds
+data.set_point_interval(0.01)  # 10ms intervals
+
+# Run simulation  
+sim.run()
+
+# Extract results
+results = data.states()
+time = data.voi().values()  # Variable of integration (time)
+
+# Get specific variables
+lv_pressure = data.states()['heart.u_lv'].values()
+lv_volume = data.states()['heart.q_lv'].values()
+
+# Plot
+plt.figure(figsize=(10, 4))
+
+plt.subplot(1, 2, 1)
+plt.plot(time, lv_pressure / 133.322)  # Convert Pa to mmHg
+plt.xlabel('Time (s)')
+plt.ylabel('LV Pressure (mmHg)')
+
+plt.subplot(1, 2, 2)
+plt.plot(time, lv_volume * 1e6)  # Convert m3 to mL
+plt.xlabel('Time (s)')
+plt.ylabel('LV Volume (mL)')
+
+plt.tight_layout()
+plt.savefig('simulation_results.png')
+```
+
+### Using Python Module
+
+```python
+from solver_wrappers.python_solver_helper import SimulationHelper
+import matplotlib.pyplot as plt
+
+# Create simulation
+sim_helper = SimulationHelper(
+    'generated_models/3compartment/3compartment.py',
+    dt=0.01,
+    sim_time=2.0
+)
+
+# Configure solver
+sim_helper.set_solve_ivp_method('BDF')  # or 'RK45', 'LSODA'
+
+# Run
+success = sim_helper.run()
+
+if success:
+    # Get results
+    time = sim_helper.get_time()
+    lv_pressure = sim_helper.get_variable('heart.u_lv')
+    
+    # Plot
+    plt.plot(time, lv_pressure / 133.322)
+    plt.xlabel('Time (s)')
+    plt.ylabel('LV Pressure (mmHg)')
+    plt.savefig('python_sim_results.png')
+else:
+    print("Simulation failed!")
+```
+
+## File Validation
+
+After generation, verify all expected files exist:
+
+```bash
+#!/bin/bash
+# validate_output.sh
+
+MODEL=3compartment
+OUTDIR="generated_models/$MODEL"
+
+echo "Validating generated files for $MODEL..."
+
+# Check main files
+for file in "$MODEL.cellml" "${MODEL}_modules.cellml" "${MODEL}_parameters.cellml" \
+            "${MODEL}_units.cellml" "${MODEL}_parameters.csv"; do
+  if [ -f "$OUTDIR/$file" ]; then
+    echo "✓ $file"
+  else
+    echo "✗ Missing: $file"
+    exit 1
+  fi
+done
+
+# Check CellML validity with OpenCOR
+echo ""
+echo "Testing model validity..."
+python -c "
+import opencor as oc
+sim = oc.open_simulation('$OUTDIR/$MODEL.cellml')
+if sim.valid():
+    print('✓ Model is valid')
+    exit(0)
+else:
+    print('✗ Model has errors')
+    exit(1)
+"
+
+if [ $? -eq 0 ]; then
+  echo ""
+  echo "All validation checks passed!"
+else
+  exit 1
+fi
+```
+
+## Modifying Generated Models
+
+<Warning>
+**Do not manually edit generated CellML files.** Changes will be overwritten when you re-run autogeneration.
+</Warning>
+
+Instead, modify the source files:
+
+| To change... | Edit this file... |
+|--------------|-------------------|
+| Model structure | `[file_prefix]_vessel_array.csv` |
+| Parameter values | `[file_prefix]_parameters.csv` |
+| Module equations | `*_modules.cellml` in `module_config_user/` or `src/generators/resources/` |
+| Port definitions | `*_modules_config.json` |
+| Units | `user_units.cellml` |
+| Generation settings | `user_inputs.yaml` |
+
+After editing source files, re-run autogeneration to update the model.
+
+## Archiving and Versioning
+
+For reproducibility, archive generated models with their inputs:
+
+```bash
+#!/bin/bash
+# archive_model.sh
+
+MODEL=3compartment
+DATE=$(date +%Y%m%d)
+ARCHIVE="model_archive_${MODEL}_${DATE}.tar.gz"
+
+tar czf "$ARCHIVE" \
+  "resources/${MODEL}_vessel_array.csv" \
+  "resources/${MODEL}_parameters.csv" \
+  "generated_models/$MODEL/" \
+  "user_inputs.yaml"
+
+echo "Archived to $ARCHIVE"
+```
+
+For git version control:
+
+```bash
+# Commit input files and configuration
+git add resources/3compartment_*.csv
+git add user_inputs.yaml
+git commit -m "3-compartment model v1.0: initial calibration"
+
+# Tag the version
+git tag -a v1.0-3compartment -m "3-compartment model, calibrated to patient data"
+```
+
+<Note>
+Generally, don't commit generated files to git - they can be reproduced from inputs. Add `generated_models/` to `.gitignore`.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Basic Simulation Tutorial" icon="wave-pulse" href="/tutorials/basic-model">
+    Step-by-step simulation guide
+  </Card>
+  <Card title="Parameter Identification" icon="target" href="/param-id/overview">
+    Calibrate your model to data
+  </Card>
+  <Card title="3-Compartment Example" icon="heart" href="/tutorials/3compartment-example">
+    Complete worked example
+  </Card>
+  <Card title="Analysis" icon="chart-line" href="/analysis/sensitivity-analysis">
+    Analyze your model
+  </Card>
+</CardGroup>

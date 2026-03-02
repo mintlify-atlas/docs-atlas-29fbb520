@@ -1,122 +1,144 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Circulatory Autogen",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#2563eb",
+    "light": "#60a5fa",
+    "dark": "#1e40af"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/FinbarArgus/circulatory_autogen"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/FinbarArgus/circulatory_autogen"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
+            "pages": ["introduction", "installation", "quickstart"]
+          },
+          {
+            "group": "Core Concepts",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "concepts/overview",
+              "concepts/cellml-modules",
+              "concepts/model-architecture",
+              "concepts/vessel-networks"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Tutorials",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "tutorials/basic-model",
+              "tutorials/3compartment-example",
+              "tutorials/custom-modules"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Model Generation",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "generation/vessel-arrays",
+              "generation/parameters",
+              "generation/configuration",
+              "generation/running-autogeneration",
+              "generation/output-files"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Parameter Identification",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "param-id/overview",
+              "param-id/configuration",
+              "param-id/optimizers",
+              "param-id/mcmc",
+              "param-id/observation-data"
+            ]
+          },
+          {
+            "group": "Analysis",
+            "pages": [
+              "analysis/sensitivity-analysis",
+              "analysis/identifiability-analysis"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/hpc-deployment",
+              "advanced/cpp-generation",
+              "advanced/python-models",
+              "advanced/custom-functions"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Generators",
             "pages": [
-              "api-reference/introduction"
+              "api/generators/cellml-generator",
+              "api/generators/cpp-generator",
+              "api/generators/python-generator"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Models",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/models/cvs0d-model"
+            ]
+          },
+          {
+            "group": "Parameter Identification",
+            "pages": [
+              "api/param-id/param-id-class",
+              "api/param-id/optimizers",
+              "api/param-id/operation-funcs"
+            ]
+          },
+          {
+            "group": "Parsers",
+            "pages": [
+              "api/parsers/model-parsers",
+              "api/parsers/primitive-parsers"
+            ]
+          },
+          {
+            "group": "Solver Wrappers",
+            "pages": [
+              "api/solvers/opencor-helper",
+              "api/solvers/myokit-helper",
+              "api/solvers/python-solver"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utilities/diagnostics",
+              "api/utilities/obs-data-helpers",
+              "api/utilities/utility-funcs"
+            ]
+          },
+          {
+            "group": "Analysis",
+            "pages": [
+              "api/analysis/sensitivity-analysis",
+              "api/analysis/identifiability-analysis"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

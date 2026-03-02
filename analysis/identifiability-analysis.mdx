@@ -1,0 +1,255 @@
+---
+title: Identifiability Analysis
+description: Assess parameter uncertainty and ensure identified parameters can be trusted using Laplace approximation and profile likelihood methods
+---
+
+Identifiability Analysis (IA) ensures that identified parameters can be trusted, i.e., have a small uncertainty. After calibrating your model through parameter identification, IA quantifies how well the available data constrains each parameter and reveals whether multiple parameter sets could produce similar results.
+
+## Why Use Identifiability Analysis?
+
+Identifiability analysis answers critical questions:
+
+- **Are my identified parameters unique?** Or could other parameter values fit the data equally well?
+- **How uncertain are the parameter estimates?** Large uncertainties suggest the data doesn't strongly constrain the parameter
+- **Which parameters are well-determined?** And which might need additional experimental data to pin down?
+
+Without IA, you might have false confidence in parameter values that are actually poorly constrained by your data.
+
+## Prerequisites
+
+Before running identifiability analysis, you need:
+
+- A completed parameter identification run with best-fit parameters computed
+- `param_id_output` directory available for the model and dataset
+- Successfully generated `best_param_vals.npy` file
+
+## Available Methods
+
+### Laplace Approximation
+
+The Laplace approximation makes an approximation of your parameter posterior distribution, assuming it is Gaussian. This method uses the Hessian of the log-likelihood with respect to the parameters to estimate the covariance matrix.
+
+**Advantages:**
+- Fast computation (no additional simulations required)
+- Provides full covariance matrix showing parameter correlations
+- Good for identifying parameter uncertainty when posterior is approximately Gaussian
+
+**Limitations:**
+- Assumes Gaussian posterior (may not be accurate for highly non-linear models)
+- Local approximation around the best-fit parameters
+
+### Profile Likelihood
+
+<Note>
+Profile likelihood method is planned but not yet implemented in the current version.
+</Note>
+
+Profile likelihood systematically varies each parameter while re-optimizing all others, providing a more robust assessment of parameter identifiability without Gaussian assumptions.
+
+## Configuration
+
+### Enabling Identifiability Analysis
+
+Set `do_ia: True` in your `user_inputs.yaml` configuration file:
+
+```yaml user_inputs.yaml
+do_ia: true
+
+ia_options:
+  method: 'Laplace'
+```
+
+### Configuration Options
+
+<ResponseField name="method" type="string" default="Laplace">
+  Identifiability analysis method. Currently available: `'Laplace'`
+  
+  Future options will include: `'profile_likelihood'`
+</ResponseField>
+
+## Running Identifiability Analysis
+
+There are two ways to run IA:
+
+### Option 1: As Part of Parameter Identification
+
+Set `do_ia: True` and run parameter identification:
+
+```bash
+./run_param_id.sh <NUM_CORES>
+```
+
+Identifiability analysis will automatically run after parameter identification completes.
+
+### Option 2: Separately After Parameter Identification
+
+If you've already completed parameter identification, run IA separately:
+
+```bash
+./run_identifiability_analysis.sh
+```
+
+<Note>
+The Laplace approximation is currently not parallelized, so it runs only on rank 0 even in MPI mode.
+</Note>
+
+## Expected Output
+
+Laplace approximation results are saved in your `param_id_output` directory:
+
+- `<file_prefix>_laplace_mean.npy`: Best-fit parameter values (mean of the approximated Gaussian)
+- `<file_prefix>_laplace_covariance.npy`: Covariance matrix showing parameter uncertainties and correlations
+- `<file_prefix>_laplace_corner_plot.pdf`: Corner plot visualization of the parameter distributions
+
+## Interpreting Results
+
+### Covariance Matrix
+
+The covariance matrix quantifies parameter uncertainties and correlations:
+
+- **Diagonal elements:** Variance of each parameter (larger values = higher uncertainty)
+- **Off-diagonal elements:** Covariance between parameter pairs
+  - Positive values: parameters tend to increase/decrease together
+  - Negative values: when one parameter increases, the other tends to decrease
+  - Near-zero values: parameters are approximately independent
+
+### Corner Plot
+
+The corner plot visualizes the approximate posterior distribution:
+
+- **Diagonal panels:** Marginal distributions for each parameter
+  - Narrow peaks: well-identified parameters
+  - Wide distributions: poorly-identified parameters
+- **Off-diagonal panels:** 2D projections showing correlations
+  - Circular contours: parameters are uncorrelated
+  - Elongated ellipses: strong correlations between parameters
+
+The plot shows quantiles (5%, 50%, 95%) to indicate uncertainty ranges.
+
+### Example Interpretation
+
+```python
+print("Laplace Approximation Results:")
+print("Mean (Best Parameter Values):", mean)
+print("Covariance Matrix:\n", covariance_matrix)
+```
+
+**Well-identified parameter:**
+- Small diagonal covariance value
+- Narrow peak in corner plot
+- Quantile ranges are tight (5% and 95% are close to 50%)
+
+**Poorly-identified parameter:**
+- Large diagonal covariance value
+- Wide distribution in corner plot
+- Quantile ranges span a large interval
+- May show strong correlations with other parameters
+
+## Working with Results Programmatically
+
+You can load and visualize Laplace results:
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load results
+mean = np.load('path/to/prefix_laplace_mean.npy')
+covariance = np.load('path/to/prefix_laplace_covariance.npy')
+
+# Extract standard deviations
+std_devs = np.sqrt(np.diag(covariance))
+
+# Calculate correlation matrix
+corr_matrix = covariance / np.outer(std_devs, std_devs)
+
+print("Parameter uncertainties (std dev):", std_devs)
+print("Correlation matrix:\n", corr_matrix)
+```
+
+### Plotting Custom Visualizations
+
+```python
+import corner
+
+# Generate samples from the Laplace approximation
+samples = np.random.multivariate_normal(mean, covariance, size=100000)
+
+# Create corner plot with custom parameter names
+figure = corner.corner(
+    samples,
+    labels=parameter_names,
+    truths=mean,
+    quantiles=[0.05, 0.5, 0.95],
+    show_titles=True,
+    title_fmt='.3f'
+)
+plt.savefig('custom_corner_plot.pdf')
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Missing files error">
+    Confirm that parameter identification finished successfully and produced:
+    - `best_param_vals.npy`
+    - Related output files in `param_id_output` directory
+    
+    Check the parameter identification logs for any errors.
+  </Accordion>
+
+  <Accordion title="Singular or near-singular Hessian warning">
+    This warning indicates potential issues with parameter identifiability:
+    
+    - Some parameters may be non-identifiable (infinite uncertainty)
+    - Parameters may be perfectly correlated
+    - The model may be over-parameterized for the available data
+    
+    The code automatically applies regularization and uses pseudo-inverse to handle this, but you should:
+    1. Review the covariance matrix for extremely large values
+    2. Consider fixing some parameters or collecting more data
+    3. Run sensitivity analysis to identify which parameters are non-influential
+  </Accordion>
+
+  <Accordion title="Unrealistic parameter uncertainties">
+    If the Laplace approximation gives unrealistic results (e.g., negative variances, extremely large uncertainties):
+    
+    - The posterior may be highly non-Gaussian
+    - Consider using profile likelihood when available
+    - Check that parameter identification converged properly
+    - Verify the model is not ill-conditioned
+  </Accordion>
+
+  <Accordion title="Corner plot fails to generate">
+    Ensure the `corner` package is installed:
+    
+    ```bash
+    python -m pip install corner
+    ```
+    
+    Check that you have sufficient memory for sampling (default: 100,000 samples).
+  </Accordion>
+</AccordionGroup>
+
+## Improving Parameter Identifiability
+
+If IA reveals poorly-identified parameters:
+
+1. **Collect more informative data:** Add measurements that are sensitive to the uncertain parameters
+2. **Reduce parameter space:** Fix non-influential parameters (identified via sensitivity analysis)
+3. **Add prior information:** Incorporate known physiological ranges as constraints
+4. **Simplify the model:** Remove parameters that can't be constrained by available data
+5. **Target specific outputs:** Design experiments to probe uncertain parameters
+
+## Next Steps
+
+After completing identifiability analysis:
+
+1. Review parameter uncertainties and correlations
+2. Identify which parameters are well-constrained vs. poorly-identified
+3. Decide whether to:
+   - Accept current uncertainties
+   - Collect additional experimental data
+   - Fix some parameters based on literature values
+   - Simplify the model
+4. Document parameter uncertainties for model validation and prediction studies

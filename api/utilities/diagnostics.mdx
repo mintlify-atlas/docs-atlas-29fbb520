@@ -1,0 +1,77 @@
+---
+title: "Diagnostics"
+description: "Chain convergence diagnostics for MCMC sampling"
+---
+
+The `Diagnostics` class provides convergence diagnostic tools for MCMC chains, including Gelman-Rubin and Geweke statistics.
+
+## Class: Diagnostics
+
+A class for running convergence diagnostics on MCMC chains. Adapted from [ChainConsumer](https://github.com/Samreay/ChainConsumer).
+
+### Constructor
+
+```python
+Diagnostics()
+```
+
+Initializes a new Diagnostics instance.
+
+## Methods
+
+### gelman_rubin
+
+```python
+gelman_rubin(chain, threshold=0.05)
+```
+
+Runs the Gelman-Rubin diagnostic on the supplied chains to assess convergence.
+
+<ParamField path="chain" type="numpy.ndarray" required>
+  MCMC chain array with shape (num_steps, num_walkers, num_params)
+</ParamField>
+
+<ParamField path="threshold" type="float" default="0.05">
+  Maximum permitted deviation from 1 for the convergence ratio R̂
+</ParamField>
+
+**Returns:** `bool` - Whether all chains pass the convergence test
+
+**Notes:**
+- Requires at least 2 walkers (num_walkers > 1)
+- Computes the convergence ratio R̂ = √(V̂/W) where:
+  - B = n/(m-1) Σ(θ̄.j - θ̄..)²
+  - W = (1/m) Σ[(1/(n-1)) Σ(θij - θ̄.j)²]
+  - V̂ = ((n-1)/n)W + (1/n)B
+- WARNING: This function has not been fully tested yet
+
+### geweke
+
+```python
+geweke(chain, first=0.1, last=0.5, threshold=0.05)
+```
+
+Runs the Geweke diagnostic on the supplied chains to test for stationarity.
+
+<ParamField path="chain" type="numpy.ndarray" required>
+  MCMC chain array with shape (num_steps, num_walkers, num_params)
+</ParamField>
+
+<ParamField path="first" type="float" default="0.1">
+  Fraction of the start of the chain to use for comparison
+</ParamField>
+
+<ParamField path="last" type="float" default="0.5">
+  Fraction of the end of the chain to use for comparison
+</ParamField>
+
+<ParamField path="threshold" type="float" default="0.05">
+  P-value threshold for testing normality of the z-scores
+</ParamField>
+
+**Returns:** `bool` - Whether the chains pass the stationarity test
+
+**Notes:**
+- Compares means from the first and last portions of the chain
+- Uses spectral density estimation for variance calculation
+- Tests whether z-scores follow a normal distribution

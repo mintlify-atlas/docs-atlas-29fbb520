@@ -1,0 +1,151 @@
+---
+title: "Identifiability Analysis"
+description: "Assess parameter identifiability using Laplace approximation and profile likelihood"
+---
+
+The `IdentifiabilityAnalysis` class provides methods for assessing which parameters can be reliably identified from data.
+
+## Class: IdentifiabilityAnalysis
+
+A class for performing identifiability analysis on 0D models using Laplace approximation and profile likelihood methods.
+
+### Constructor
+
+```python
+IdentifiabilityAnalysis(
+    model_path, 
+    model_type, 
+    file_name_prefix, 
+    DEBUG=False,
+    param_id_output_dir=None, 
+    resources_dir=None, 
+    param_id=None
+)
+```
+
+<ParamField path="model_path" type="str" required>
+  Path to the model file
+</ParamField>
+
+<ParamField path="model_type" type="str" required>
+  Type of model (e.g., 'CellML', 'python')
+</ParamField>
+
+<ParamField path="file_name_prefix" type="str" required>
+  Prefix for output files
+</ParamField>
+
+<ParamField path="DEBUG" type="bool" default="False">
+  Enable debug mode
+</ParamField>
+
+<ParamField path="param_id_output_dir" type="str" default="None">
+  Directory for parameter identification outputs
+</ParamField>
+
+<ParamField path="resources_dir" type="str" default="None">
+  Directory containing resource files
+</ParamField>
+
+<ParamField path="param_id" type="object" required>
+  Parameter identification object with methods for computing likelihood
+</ParamField>
+
+**Raises:** `ValueError` if param_id is None
+
+## Methods
+
+### set_best_param_vals
+
+```python
+set_best_param_vals(best_param_vals)
+```
+
+Set the best-fit parameter values for identifiability analysis.
+
+<ParamField path="best_param_vals" type="numpy.ndarray" required>
+  Array of optimal parameter values
+</ParamField>
+
+### run
+
+```python
+run(ia_options)
+```
+
+Run identifiability analysis using the specified method.
+
+<ParamField path="ia_options" type="dict" required>
+  Dictionary containing identifiability analysis options:
+  - `method`: 'profile_likelihood' or 'Laplace'
+</ParamField>
+
+**Notes:**
+- For Laplace method: only runs on MPI rank 0 (not parallelized)
+- Profile likelihood method is not yet implemented
+
+### run_profile_likelihood
+
+```python
+run_profile_likelihood(ia_options)
+```
+
+Run profile likelihood-based identifiability analysis.
+
+<ParamField path="ia_options" type="dict" required>
+  Options for profile likelihood analysis
+</ParamField>
+
+**Status:** Not yet implemented
+
+### run_laplace_approximation
+
+```python
+run_laplace_approximation(ia_options)
+```
+
+Run Laplace approximation to estimate parameter covariance matrix.
+
+<ParamField path="ia_options" type="dict" required>
+  Options for Laplace approximation
+</ParamField>
+
+**Process:**
+1. Computes Hessian matrix at best-fit parameters
+2. Inverts Hessian to get covariance matrix
+3. Handles singular matrices using pseudo-inverse and regularization
+4. Saves mean and covariance to .npy files
+
+**Outputs:**
+- `{file_prefix}_laplace_mean.npy`: Best parameter values
+- `{file_prefix}_laplace_covariance.npy`: Covariance matrix
+
+**Notes:**
+- Adds regularization (1e-10 * I) if Hessian is singular
+- Falls back to pseudo-inverse if regularization fails
+- Prints warnings for numerical issues
+
+### plot_laplace_results
+
+```python
+plot_laplace_results(parameter_names, output_dir)
+```
+
+Generate corner plots visualizing the Laplace approximation results.
+
+<ParamField path="parameter_names" type="list[str]" required>
+  List of parameter names for plot labels
+</ParamField>
+
+<ParamField path="output_dir" type="str" required>
+  Directory where the plot will be saved
+</ParamField>
+
+**Outputs:**
+- `{file_prefix}_laplace_corner_plot.pdf`: Corner plot showing parameter distributions and correlations
+
+**Notes:**
+- Generates 100,000 samples from multivariate normal distribution
+- Shows 5th, 50th, and 95th percentiles
+- Uses scientific notation for axis labels
+- Automatically loads saved results if not already in memory

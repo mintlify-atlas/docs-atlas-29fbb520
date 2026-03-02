@@ -1,0 +1,172 @@
+---
+title: CVS0DCellMLGenerator
+description: Generator class for creating CellML files from 0D cardiovascular system models
+---
+
+## Overview
+
+The `CVS0DCellMLGenerator` class generates CellML files for 0D cardiovascular models. It creates modular CellML files with proper imports, units, parameters, and module connections.
+
+**Source:** `~/workspace/source/src/generators/CVSCellMLGenerator.py`
+
+## Class: CVS0DCellMLGenerator
+
+### Constructor
+
+```python
+CVS0DCellMLGenerator(model, inp_data_dict)
+```
+
+Initializes the generator with a model and configuration dictionary.
+
+<ParamField path="model" type="CVS0DModel" required>
+  The 0D cardiovascular system model to generate CellML files for.
+</ParamField>
+
+<ParamField path="inp_data_dict" type="dict" required>
+  Input configuration dictionary with the following keys:
+  
+  - `generated_models_subdir` (str): Directory where generated models will be saved
+  - `file_prefix` (str): Prefix for all generated files
+  - `resources_dir` (str, optional): Path to resources directory. Defaults to package resources if None
+  - `external_modules_dir` (str, optional): Path to external modules directory
+  - `DEBUG` (bool): Enable debug output
+</ParamField>
+
+**Example:**
+
+```python
+from generators.CVSCellMLGenerator import CVS0DCellMLGenerator
+
+inp_data = {
+    'generated_models_subdir': './generated',
+    'file_prefix': 'my_cvs_model',
+    'resources_dir': None,
+    'external_modules_dir': None,
+    'DEBUG': False
+}
+
+generator = CVS0DCellMLGenerator(model, inp_data)
+```
+
+### Methods
+
+#### generate_files()
+
+```python
+generate_files() -> bool
+```
+
+Generates all required CellML and supporting files for the model.
+
+**Returns:** `bool` - True if model generation and validation succeeded, False otherwise
+
+**Generated Files:**
+- `{file_prefix}.cellml` - Main CellML model file
+- `{file_prefix}_units.cellml` - Units definitions
+- `{file_prefix}_parameters.cellml` - Parameter component
+- `{file_prefix}_parameters.csv` - Parameter values CSV
+- `{file_prefix}_modules.cellml` - Module definitions
+- `{file_prefix}_flat.cellml` - Flattened model (if LibCellML available)
+
+**Validation:**
+- Checks model with LibCellML Analyser (if available)
+- Verifies model is ODE type
+- Tests model in OpenCOR (if available)
+- Falls back to Python generation and simulation test
+
+**Example:**
+
+```python
+generator = CVS0DCellMLGenerator(model, inp_data_dict)
+success = generator.generate_files()
+
+if success:
+    print("Model generated successfully")
+else:
+    print("Model generation failed")
+```
+
+**Output:**
+```
+Generating model files at ./generated
+Generating CellML file my_cvs_model.cellml
+writing units mapping
+writing imports
+writing vessel mappings
+writing environment to sum venous input flows
+writing environment to sum generic junctions input flows
+writing environment to apply operations for multiports
+writing variable access
+writing global params variable access
+writing mappings between computational environment and modules
+writing mappings between computational environment and modules for global parameters
+writing mappings between constant params
+writing writing time mappings between environment and modules
+Model generation complete.
+Checking Status of Model
+analysed model has type ODE . Is it ODE type? True
+Testing to see if model opens in OpenCOR
+Model generation has been successful.
+```
+
+## Properties
+
+### Public Properties
+
+<ParamField path="model" type="CVS0DModel">
+  The cardiovascular system model being generated
+</ParamField>
+
+<ParamField path="output_dir" type="str">
+  Output directory for generated files
+</ParamField>
+
+<ParamField path="file_prefix" type="str">
+  Prefix used for all generated filenames
+</ParamField>
+
+<ParamField path="resources_dir" type="str">
+  Path to resources directory containing base scripts and modules
+</ParamField>
+
+<ParamField path="all_parameters_defined" type="bool">
+  Whether all required parameters have values defined
+</ParamField>
+
+<ParamField path="DEBUG" type="bool">
+  Debug mode flag for verbose output
+</ParamField>
+
+## Error Handling
+
+The generator performs several validation checks:
+
+1. **Model Type Validation**: Ensures the model is a `CVS0DModel` instance
+2. **LibCellML Analysis**: Validates the generated CellML is a valid ODE model
+3. **Parameter Validation**: Checks all required parameters are defined
+4. **OpenCOR Testing**: Attempts to open and validate the model in OpenCOR
+5. **Python Simulation**: Falls back to Python generation and test simulation if OpenCOR unavailable
+
+**Missing Parameters:**
+
+If parameters are missing, the generator creates a `{file_prefix}_parameters_unfinished.csv` file with `EMPTY_MUST_BE_FILLED` tags indicating where values are needed.
+
+## Dependencies
+
+**Required:**
+- `numpy`
+- `pandas`
+
+**Optional (for validation):**
+- `libcellml` - For model analysis and validation
+- `opencor` - For model testing
+- When LibCellML is unavailable, validation is limited
+
+## Notes
+
+- The generator supports CellML 1.1 format
+- Module scripts are loaded from `resources/` and `module_config_user/` directories
+- External modules can be provided via `external_modules_dir`
+- Generated models follow a modular structure with separate files for units, parameters, and modules
+- The generator handles complex vessel connections, junctions, and boundary conditions automatically
