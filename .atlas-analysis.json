@@ -1,0 +1,160 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "Circulatory Autogen",
+  "projectDescription": "Automated generation and calibration of CellML circulatory system models from modular components",
+  "theme": "aspen",
+  "primaryColor": "#2563eb",
+  "lightColor": "#60a5fa",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "installation", "quickstart"]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/overview",
+              "concepts/cellml-modules",
+              "concepts/model-architecture",
+              "concepts/vessel-networks"
+            ]
+          },
+          {
+            "group": "Tutorials",
+            "pages": [
+              "tutorials/basic-model",
+              "tutorials/3compartment-example",
+              "tutorials/custom-modules"
+            ]
+          },
+          {
+            "group": "Model Generation",
+            "pages": [
+              "generation/vessel-arrays",
+              "generation/parameters",
+              "generation/configuration",
+              "generation/running-autogeneration",
+              "generation/output-files"
+            ]
+          },
+          {
+            "group": "Parameter Identification",
+            "pages": [
+              "param-id/overview",
+              "param-id/configuration",
+              "param-id/optimizers",
+              "param-id/mcmc",
+              "param-id/observation-data"
+            ]
+          },
+          {
+            "group": "Analysis",
+            "pages": [
+              "analysis/sensitivity-analysis",
+              "analysis/identifiability-analysis"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/hpc-deployment",
+              "advanced/cpp-generation",
+              "advanced/python-models",
+              "advanced/custom-functions"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Generators",
+            "pages": [
+              "api/generators/cellml-generator",
+              "api/generators/cpp-generator",
+              "api/generators/python-generator"
+            ]
+          },
+          {
+            "group": "Models",
+            "pages": [
+              "api/models/cvs0d-model"
+            ]
+          },
+          {
+            "group": "Parameter Identification",
+            "pages": [
+              "api/param-id/param-id-class",
+              "api/param-id/optimizers",
+              "api/param-id/operation-funcs"
+            ]
+          },
+          {
+            "group": "Parsers",
+            "pages": [
+              "api/parsers/model-parsers",
+              "api/parsers/primitive-parsers"
+            ]
+          },
+          {
+            "group": "Solver Wrappers",
+            "pages": [
+              "api/solvers/opencor-helper",
+              "api/solvers/myokit-helper",
+              "api/solvers/python-solver"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utilities/diagnostics",
+              "api/utilities/obs-data-helpers",
+              "api/utilities/utility-funcs"
+            ]
+          },
+          {
+            "group": "Analysis",
+            "pages": [
+              "api/analysis/sensitivity-analysis",
+              "api/analysis/identifiability-analysis"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Automated CellML model generation from modular vessel/component arrays",
+    "Multi-algorithm parameter identification (Genetic Algorithm, CMA-ES, Bayesian Optimization)",
+    "MCMC-based uncertainty quantification with emcee",
+    "Sobol sensitivity analysis and identifiability analysis",
+    "MPI-parallel optimization on HPC systems",
+    "Multi-target code generation (CellML, C++, Python)",
+    "OpenCOR and Myokit solver integration",
+    "Custom module and function framework for extensibility"
+  ],
+  "publicApiSurface": [
+    "CVS0DCellMLGenerator.generate_files()",
+    "CVSCppGenerator.generate_files()",
+    "PythonGenerator.generate_files()",
+    "CVS0DModel",
+    "CVS0DParamID",
+    "GeneticAlgorithmOptimiser",
+    "BayesianOptimiser",
+    "CMAESOptimiser",
+    "SensitivityAnalysis",
+    "IdentifiabilityAnalysis",
+    "ModelParsers.VesselArrayParser",
+    "ModelParsers.ModuleConfigParser",
+    "get_simulation_helper()",
+    "opencor_helper.OpencorSimHelper",
+    "myokit_helper.MyokitSimHelper",
+    "python_solver_helper.PythonSolverHelper"
+  ]
+}
